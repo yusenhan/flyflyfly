@@ -88,4 +88,4 @@ xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release
 ---
 
 ## ☕ 贊助與支持
-如果這個專案對你有幫助，歡迎在 [Ko-fi](https://ko-fi.com/agocia) 支持開發者，讓專案持續優化！
+如果這個專案對你有幫助，歡迎在 [Ko-fi](https://ko-fi.com/flyflyfly) 支持開發者，讓專案持續優化！

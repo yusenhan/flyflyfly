@@ -68,4 +68,4 @@ This tool is for development testing and privacy protection only. Users are resp
 ---
 
 ## ☕ Support
-If this project helps you, consider supporting its development via [Ko-fi](https://ko-fi.com/agocia).
+If this project helps you, consider supporting its development via [Ko-fi](https://ko-fi.com/flyflyfly).
