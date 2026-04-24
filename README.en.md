@@ -1,4 +1,4 @@
-# ✈️ flyflyfly (macOS GPS Spoofing Tool)
+# ✈️ flyflyfly - Best iOS GPS Spoofing & Location Simulator for macOS
 
 中文版: [繁體中文 README](./README.md)
 
@@ -7,8 +7,8 @@
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**A powerful GPS spoofing utility for iOS devices, built exclusively for macOS.**  
-Inject simulated coordinates into iPhone/iPad over USB or Wi-Fi. Supports native execution on Apple Silicon (M1/M2/M3) and Intel Macs.
+**flyflyfly is a high-performance iOS GPS simulation utility built exclusively for macOS.**  
+Whether you are on Intel or Apple Silicon (M1/M2/M3), you can easily inject simulated GPS coordinates into your iPhone/iPad via USB or Wi-Fi. Supporting iOS 16, 17, and the latest iOS 18, it is the most stable and intuitive location spoofing solution for Mac users.
 
 ---
 
@@ -81,6 +81,12 @@ Pre-built `.dmg` releases will be available in the future. Once released, you ca
 
 ## ⚖️ Disclaimer
 This tool is for development testing and privacy protection only. Users are responsible for any actions that violate terms of service (e.g., game cheating or fraud).
+
+---
+
+## 🏷️ Tags / Keywords (SEO & AI)
+
+#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOSSpoofing #PokemonGOJoystick #PikminBloomSPOOF #MHNSpoof #VirtualLocation #iOSDevelopment #M1Mac #M2Mac #M3Mac #LocationSimulator
 
 ---
 

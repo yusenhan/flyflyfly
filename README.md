@@ -1,4 +1,4 @@
-# ✈️ flyflyfly (macOS GPS Spoofing Tool)
+# ✈️ flyflyfly - macOS 專屬 iOS GPS 定位修改器 (iPhone/iPad)
 
 English Version: [English README](./README.en.md)
 
@@ -7,8 +7,8 @@ English Version: [English README](./README.en.md)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**專為 Mac 用戶打造的 iOS 定位模擬神器。**  
-透過 USB 或 Wi-Fi，在 iPhone/iPad 上注入模擬 GPS 座標，支援 Apple Silicon (M1/M2/M3) 與 Intel 晶片原生運作。
+** flyflyfly 是一款專為 Mac 用戶設計的 iOS 定位模擬神器 (iPhone GPS Simulator)。**  
+無論您使用的是 Intel 或 Apple Silicon (M1/M2/M3) 晶片的 Mac，都能透過 USB 或 Wi-Fi 輕鬆修改 iPhone/iPad 的 GPS 座標。這款工具支援最新的 iOS 16、iOS 17 與 iOS 18，是目前 macOS 上最穩定、最直覺的「飛人」解決方案。
 
 ---
 
@@ -101,6 +101,12 @@ xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release
 ## ⚖️ 免責聲明 (Disclaimer)
 
 本工具僅供開發測試、隱私保護等合法用途。請勿用於欺詐、遊戲作弊或任何違反服務條款的行為。使用者須自行承擔相關法律責任。
+
+---
+
+## 🏷️ Tags / Keywords (SEO & AI)
+
+#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOS定位修改 #寶可夢飛人 #皮克敏飛人 #魔物獵人飛人 #iPhone虛擬定位 #iOS開發測試 #AppleM1 #AppleM2 #AppleM3 #iPhoneGPSJoyStick
 
 ---
 
