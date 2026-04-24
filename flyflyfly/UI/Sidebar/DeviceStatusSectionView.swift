@@ -50,8 +50,8 @@ struct DeviceStatusSectionView: View {
                     .cornerRadius(6)
             } else if !vm.deviceManager.isConnected {
                 Text(isWirelessMode
-                     ? "確保 iPhone 與 Mac 在同一個 Wi‑Fi 網路，按下上方工具列的連線按鈕。"
-                     : "插上手機並解鎖，按下上方工具列的連線按鈕即可。")
+                     ? "Wi-Fi Mode Hint"
+                     : "USB Mode Hint")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -60,7 +60,7 @@ struct DeviceStatusSectionView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: { withAnimation { isShowingLogs.toggle() } }) {
                         HStack {
-                            Label(isShowingLogs ? "隱藏連線日誌" : "顯示連線日誌", 
+                            Label(isShowingLogs ? "Hide Logs" : "Show Logs", 
                                   systemImage: isShowingLogs ? "chevron.up.circle" : "chevron.down.circle")
                             Spacer()
                         }

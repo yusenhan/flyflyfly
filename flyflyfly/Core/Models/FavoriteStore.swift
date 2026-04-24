@@ -125,6 +125,30 @@ final class FavoriteStore: ObservableObject {
         }
     }
     
+    /// 導出所有我的最愛為 JSON 檔案
+    /// - Returns: 導出檔案的路徑 URL
+    func exportAll() -> URL? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMddHHmmss"
+        let timestamp = formatter.string(from: Date())
+        let fileName = "flyflyfly-\(timestamp).json"
+        
+        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        let targetURL = downloadsDir.appendingPathComponent(fileName)
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(items)
+            try data.write(to: targetURL, options: .atomic)
+            print("[INFO] Favorites exported to \(targetURL.path)")
+            return targetURL
+        } catch {
+            print("[ERROR] Failed to export favorites: \(error)")
+            return nil
+        }
+    }
+    
     private func save() {
         do {
             if !FileManager.default.fileExists(atPath: saveDirectory.path) {

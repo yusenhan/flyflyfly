@@ -1,108 +1,109 @@
 {
   "sourceLanguage" : "zh-Hant",
   "strings" : {
-    "Device Connection" : {
-      "extractionState" : "manual",
+    "Connect Device First" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Geräteverbindung" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Device Connection" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conexión del dispositivo" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイス接続" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기 연결" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Kết nối thiết bị" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设备连接" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "裝置連線" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Please Connect Device" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイスを接続してください" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先連線裝置" } }
       }
     },
-    "Connection Mode" : {
-      "extractionState" : "manual",
+    "Start New Route" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungsmodus" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Mode" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo de conexión" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続モード" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 모드" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ kết nối" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接模式" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線模式" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start New Route" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新しいルートを開始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始新路線" } }
       }
     },
-    "Start Moving" : {
-      "extractionState" : "manual",
+    "Select Location Point" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bewegung starten" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Moving" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Empezar a mover" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "移動開始" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이동 시작" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Bắt đầu di chuyển" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "開始移動" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始移動" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Location" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "地点を選択" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇定位點" } }
+      }
+    },
+    "Start Positioning" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Positioning" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "定位を開始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始定位" } }
+      }
+    },
+    "Set Location" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Set Location" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "地点を設定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "設定定位點" } }
+      }
+    },
+    "Complete and Calculate" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Calculate Route" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ルートを計算" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "完成選點並計算路線" } }
+      }
+    },
+    "Select at least 2 points" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select at least 2 points" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "2点以上選択してください" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先選至少 2 點" } }
+      }
+    },
+    "Select Start" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Start" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起点を選択" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先選擇起點" } }
+      }
+    },
+    "Select End" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select End" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "終點を選択" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請先選擇終點" } }
+      }
+    },
+    "Confirm Position" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirm Position" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "位置を確認" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確認位置" } }
+      }
+    },
+    "Start Movement" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Movement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "移動を開始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始模擬移動" } }
       }
     },
     "Stop Simulation" : {
-      "extractionState" : "manual",
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Simulation stoppen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop Simulation" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Detener simulación" } },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "シミュレーション停止" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시뮬레이션 중지" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Dừng mô phỏng" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止模擬" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "停止模擬" } }
       }
     },
-    "Search Location" : {
-      "extractionState" : "manual",
+    "Resume Simulation" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ort suchen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search Location" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Buscar ubicación" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "場所を検索" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "위치 검색" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Tìm kiếm vị trí" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜尋位置" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "搜尋位置" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resume Simulation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "シミュレーション再開" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "繼續模擬" } }
       }
     },
-    "A-B Mode" : {
-      "extractionState" : "manual",
+    "Calculating..." : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "A-B-Modus" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "A-B Mode" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo A-B" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "A-Bモード" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "A-B 모드" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ A-B" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "A-B 模式" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "A-B 模式" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Calculating..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "計算中..." } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "路線計算中..." } }
       }
     },
-    "Pin Mode" : {
-      "extractionState" : "manual",
+    "Start Simulation" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pin-Modus" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pin Mode" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo Pin" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ピンモード" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "핀 모드" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ Pin" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "定點模式" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "定點模式" } }
-      }
-    },
-    "Multi-Point Mode" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mehrpunkt-Modus" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Multi-Point Mode" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo multipunto" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マルチポイントモード" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "다중 포인트 모드" } },
-        "vi" : { "stringUnit" : { "state" : "translated", "value" : "Chế độ nhiều điểm" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "多點模式" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "多點模式" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Simulation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "シミュレーション開始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始模擬移動" } }
       }
     }
   },
