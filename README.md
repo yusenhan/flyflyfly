@@ -54,18 +54,19 @@ English Version: [English README](./README.en.md)
 
 ## 📦 安裝說明
 
-### 方式一：下載 DMG (推薦)
-1. 前往 [Releases](../../releases) 下載最新的 `flyflyfly.dmg`。
-2. 將 App 拖入應用程式資料夾。
-3. 首次開啟若被系統攔截，請 **右鍵點選 App → 開啟**。
-
-### 方式二：從原始碼建置
+### 方式一：從原始碼建置 (推薦)
+目前專案處於開發階段，建議直接從原始碼編譯：
 ```bash
 git clone https://github.com/agocia/flyflyfly.git
 cd flyflyfly
 # 使用 Xcodebuild 進行編譯
 xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
 ```
+編譯完成後，您可以在 `build/Release` 目錄下找到 `flyflyfly.app`。
+
+### 方式二：下載 DMG (即將推出)
+未來我們將提供預編譯好的 `.dmg` 安裝檔。屆時您可以前往 [Releases](../../releases) 下載最新的 `flyflyfly.dmg`。
+
 
 ---
 

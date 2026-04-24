@@ -46,15 +46,19 @@ Inject simulated coordinates into iPhone/iPad over USB or Wi-Fi. Supports native
 
 ## 📦 Installation
 
-### Option 1: DMG (Recommended)
-Download the latest `flyflyfly.dmg` from the [Releases](../../releases) page and drag it to your Applications folder.
-
-### Option 2: Build from Source
+### Option 1: Build from Source (Recommended)
+As the project is in active development, it's best to build directly from the source:
 ```bash
 git clone https://github.com/agocia/flyflyfly.git
 cd flyflyfly
+# Build using xcodebuild
 xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
 ```
+Once built, you'll find `flyflyfly.app` in the `build/Release` directory.
+
+### Option 2: Download DMG (Coming Soon)
+Pre-built `.dmg` releases will be available in the future. Once released, you can find them in the [Releases](../../releases) section.
+
 
 ---
 
