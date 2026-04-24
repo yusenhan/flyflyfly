@@ -1,163 +1,88 @@
-# flyflyfly
+# ✈️ flyflyfly (macOS GPS Spoofing Tool)
 
-**專門為mac使用者開發的macOS GPS 定位偽裝工具，透過 USB 或 Wi‑Fi 對 iPhone / iPad 注入模擬座標。**  
-**MacOS app that spoofs GPS location on iPhone / iPad over USB or Wi‑Fi.**
- 
-**使用前請注意：iPhone / iPad 需開啟「開發者模式」**  
-**如果這個專案對您有幫助，您可以在這裡支持（贊助）它的開發：Ko-fi: https://ko-fi.com/agocia**  
+![macOS Support](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square&logo=apple)
+![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
+![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
----
-
-## 系統需求 / Requirements
-
-| 項目 | 需求 |
-|------|------|
-| macOS | 13 Ventura 以上 |
-| iPhone / iPad | iOS 16 以上，需開啟「開發者模式」 |
-| 連線方式 | USB 或 Wi‑Fi（同一網路） |
-| 其他 | 無需安裝 Python、Homebrew 或任何套件 |
+**專為 Mac 用戶打造的 iOS 定位模擬神器。**  
+透過 USB 或 Wi-Fi，在 iPhone/iPad 上注入模擬 GPS 座標，支援 Apple Silicon (M1/M2/M3) 與 Intel 晶片原生運作。
 
 ---
 
-## 安裝 / Installation
+## ✨ 核心特色
 
-### 方法一：下載 DMG（推薦）
+- 🚀 **極速連線**：隨插即用，支援 USB 與無線 Wi-Fi Tunnel 連線。
+- 🗺️ **三大模擬模式**：
+  - **A-B 模式**：自動規劃路徑，模擬真實移動曲線。
+  - **定點模式**：一鍵釘選，固定 GPS 座標。
+  - **多點模式**：自訂複雜路徑，精確控制移動軌跡。
+- 📍 **KML 支援**：支援匯入 KML 檔案，自訂地圖標記圖層 (PurePoint)。
+- ⚙️ **無需越獄**：僅需開啟「開發者模式」即可使用。
+- 💻 **免安裝環境**：App 已內嵌所有必要組件，不需額外安裝 Python 或 Homebrew。
 
-1. 前往 [Releases](../../releases) 頁面，下載最新的 `flyflyfly.dmg`
-2. 開啟 DMG，將 `flyflyfly.app` 拖入 `Applications` 資料夾
-3. 第一次開啟時，右鍵點選 App → 選「開啟」→ 確認開啟（繞過 Gatekeeper）
+---
 
-### 方法二：從原始碼建置
+## 🛠️ 系統需求
 
+| 項目 | 規格要求 |
+|------|-------------|
+| **macOS** | macOS 13 Ventura 以上 (Intel / Apple Silicon) |
+| **iPhone / iPad** | iOS 16 以上 (須開啟「開發者模式」) |
+| **連線方式** | USB 線 (首次連線必備) 或 Wi-Fi (同一區域網路) |
+
+---
+
+## 🚀 快速入門
+
+### Step 1: 裝置準備
+1. **開啟開發者模式**：`設定` → `隱私權與安全性` → `開發者模式` → `開啟` 並重啟。
+2. **信任此 Mac**：插上 USB 並解鎖裝置，點擊「信任」並輸入密碼。
+
+### Step 1: 開始連線
+1. 開啟 **flyflyfly**。
+2. 在側邊欄選擇 **USB** 或 **Wi-Fi**。
+3. 點擊 **「開始連線」**。
+   - *註：建立通道 (Tunnel) 時可能會要求輸入 Mac 管理員密碼，這是正常現象。*
+
+### Step 3: 模擬定位
+- 在地圖上點選位置，選擇上方 **A-B**、**定點** 或 **多點** 模式，然後點擊「開始」。
+
+---
+
+## 📦 安裝說明
+
+### 方式一：下載 DMG (推薦)
+1. 前往 [Releases](../../releases) 下載最新的 `flyflyfly.dmg`。
+2. 將 App 拖入應用程式資料夾。
+3. 首次開啟若被系統攔截，請 **右鍵點選 App → 開啟**。
+
+### 方式二：從原始碼建置
 ```bash
 git clone https://github.com/agocia/flyflyfly.git
 cd flyflyfly
+# 使用 Xcodebuild 進行編譯
 xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
 ```
 
 ---
 
-## 使用前準備 / Before You Start
+## ❓ 常見問題 (Troubleshooting)
 
-### iPhone / iPad 設定
-
-1. **開啟開發者模式**（iOS 16+）  
-   設定 → 隱私權與安全性 → 開發者模式 → 開啟 → 重新啟動
-
-2. **信任這台 Mac**（USB 首次連線）  
-   插上 USB 後，iPhone 會詢問「是否信任此電腦？」→ 點「信任」→ 輸入密碼
-
-3. **Wi‑Fi 連線額外步驟**  
-   先用 USB 完成一次信任配對，之後才能切換為 Wi‑Fi 模式
+- **Q: 為什麼一直卡在「連線中」？**  
+  A: 請確認手機螢幕已解鎖，且已在 Xcode 或 Finder 中「信任」過此 Mac。
+- **Q: 停止後 GPS 沒有恢復？**  
+  A: 點擊側邊欄的「清除定位點」或重新啟動 iPhone 的定位服務即可恢復真實位置。
+- **Q: Wi-Fi 連線失敗？**  
+  A: 請確保 Mac 與 iPhone 處於同一個 Wi-Fi 網路。若失敗，App 會自動回退至 USB 連線。
 
 ---
 
-## 使用步驟 / How to Use
-
-### 步驟一：連線裝置
-
-**USB 連線（預設）：**
-1. 用 USB 線連接 iPhone / iPad
-2. 開啟 flyflyfly
-3. 在側邊欄的「連線模式」分段切換中確認「USB」已選取
-4. 點「開始連線」
-5. 若出現密碼提示，輸入 Mac 管理員密碼（建立 tunnel 需要）
-
-**Wi‑Fi 無線連線：**
-1. 確保 iPhone 與 Mac 在同一個 Wi‑Fi 網路
-2. 開啟 flyflyfly
-3. 在側邊欄的「連線模式」分段切換中切換為「Wi‑Fi」
-4. 點「開始連線」
-
-> 若目前已經透過 USB 成功連線，可直接切換為 Wi‑Fi；App 會自動中斷目前連線並重新建立 Wi‑Fi tunnel。
-
-> 連線成功後，側邊欄會顯示「已連線」及裝置名稱。
-> 若 USB 被拔除、Wi‑Fi tunnel 中斷，App 會自動切換成斷線狀態並停止持續移動，等待你重新連線。
-
----
-
-### 步驟二：選擇操作模式
-
-側邊欄頂部的分段選擇器可切換三種模式：
-
-| 模式 | 說明 |
-|------|------|
-| **A-B** | 在地圖上點選起點 A 和終點 B，App 自動規劃路線並沿路移動 |
-| **定點** | 固定在地圖上點選的單一座標 |
-| **多點** | 依序點選多個路徑點，App 依序移動 |
-
----
-
-### 步驟三：設定位置
-
-**A-B 路線模式：**
-1. 點選地圖設定起點 A → 點「確認 A 點」
-2. 點選地圖設定終點 B → 點「確認 B 點」
-3. 選擇路線後點「開始移動」
-4. 可調整速度（km/h）和是否循環
-
-**定點模式：**
-1. 點選地圖上的目標位置
-2. 點「釘選此位置」
-3. GPS 即固定在該點
-
-**多點模式：**
-1. 依序點選地圖上的路徑點
-2. 點「開始移動」
-
-> 也可在搜尋欄輸入地址或地名直接跳轉。
-
----
-
-### 步驟四：停止模擬
-
-點「停止」或「清除路線」即可停止 GPS 偽裝，裝置恢復真實位置。
-
----
-
-## PurePoint 地圖圖層 / PurePoint Overlay
-
-支援匯入 KML 格式的地理資料，在地圖上顯示自訂標記：
-
-1. 側邊欄點「匯入 KML」
-2. 選擇 `.kml` 檔案
-3. 圖層會顯示在地圖上，可依分類篩選
-
----
-
-## 常見問題 / Troubleshooting
-
-**Q: 點「開始連線」後一直轉圈？**  
-A: 確認 iPhone 已解鎖、USB 已信任此 Mac。若使用 Wi‑Fi，確認同一網路。
-
-**Q: 出現「需要管理員密碼」提示？**  
-A: 正常現象。建立 tunnel 需要短暫的 root 權限，輸入 Mac 密碼即可。
-
-**Q: Wi‑Fi 連線失敗，自動切換為 USB？**  
-A: App 會自動 fallback。若要強制 Wi‑Fi，確認裝置在同一網路且防火牆未封鎖。
-
-**Q: 已經用 USB 連上了，能不能直接切換成 Wi‑Fi？**  
-A: 可以。直接在側邊欄把連線模式切到「Wi‑Fi」，App 會自動中斷目前 USB 連線並重新建立 Wi‑Fi tunnel。
-
-**Q: 拔掉手機後 App 為什麼會停止移動？**  
-A: 這是正常行為。現在偵測到 tunnel / 裝置中斷時，App 會立即顯示斷線並停止模擬，避免地圖流程繼續假跑。
-
-**Q: 停止後 GPS 沒有恢復？**  
-A: 點「清除定位點」或重新啟動 iPhone 的定位服務。
-
-**Q: iOS 17 以上連線失敗？**  
-A: 確認已開啟「開發者模式」，並在 Xcode 或 Finder 中信任過此裝置。
-
----
-
-## 注意事項 / Disclaimer
+## ⚖️ 免責聲明 (Disclaimer)
 
 本工具僅供開發測試、隱私保護等合法用途。請勿用於欺詐、遊戲作弊或任何違反服務條款的行為。使用者須自行承擔相關法律責任。
 
-This tool is intended for legitimate use cases such as development testing and privacy protection. Do not use it for fraud, game cheating, or any activity that violates terms of service. Users are solely responsible for their actions.
-
 ---
 
-## 授權 / License
-
-MIT License — 詳見 [LICENSE](LICENSE)
+## ☕ 贊助與支持
+如果這個專案對你有幫助，歡迎在 [Ko-fi](https://ko-fi.com/agocia) 支持開發者，讓專案持續優化！
