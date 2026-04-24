@@ -1,0 +1,31 @@
+# Xcode
+#
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+project.xcworkspace/xcuserdata/
+project.xcworkspace/xcshareddata/swiftpm/configuration/control-cache
+*.mod/
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData
+*.xcuserstate
+*.xcscmblueprint
+
+# Python
+#
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+build/
+dist/
+
+# OS X
+#
+.DS_Store
