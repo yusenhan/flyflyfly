@@ -92,7 +92,7 @@ graph TD
 ### 2. 編譯與執行
 目前建議從原始碼建置以獲取最新特性：
 ```bash
-git clone https://github.com/agocia/flyflyfly.git
+git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly
 xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
 ```

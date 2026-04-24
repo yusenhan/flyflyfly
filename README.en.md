@@ -91,7 +91,7 @@ graph TD
 
 ### 2. Build & Run
 ```bash
-git clone https://github.com/agocia/flyflyfly.git
+git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly
 xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
 ```
