@@ -1,12 +1,19 @@
 #!/bin/bash
-# 運行編譯好的 flyflyfly App
+# 運行編譯好的 flyflyfly App (優先運行 Release 版本)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_PATH="${SCRIPT_DIR}/build/Debug/flyflyfly.app"
 
-if [ -d "$APP_PATH" ]; then
-    echo "正在開啟 ${APP_PATH}..."
-    open "$APP_PATH"
+RELEASE_PATH="${SCRIPT_DIR}/build/Release/flyflyfly.app"
+DEBUG_PATH="${SCRIPT_DIR}/build/Debug/flyflyfly.app"
+
+if [ -d "$RELEASE_PATH" ]; then
+    echo "[INFO] 正在開啟 Release 版本: ${RELEASE_PATH}..."
+    open "$RELEASE_PATH"
+elif [ -d "$DEBUG_PATH" ]; then
+    echo "[INFO] 正在開啟 Debug 版本: ${DEBUG_PATH}..."
+    open "$DEBUG_PATH"
 else
-    echo "錯誤：找不到 App。請先執行 'xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Debug build CONFIGURATION_BUILD_DIR=build/Debug' 進行編譯。"
+    echo "錯誤：找不到 App。"
+    echo "請執行以下指令進行編譯："
+    echo "xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build CONFIGURATION_BUILD_DIR=build/Release"
     exit 1
 fi
