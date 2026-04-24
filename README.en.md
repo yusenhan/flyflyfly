@@ -1,35 +1,55 @@
-# flyflyfly
+# ✈️ flyflyfly (macOS GPS Spoofing Tool)
 
-**A macOS GPS spoofing tool built specifically for Mac users, allowing you to inject simulated coordinates into an iPhone or iPad over USB or Wi-Fi.**
+中文版: [繁體中文 README](./README.md)
 
-Chinese version: [README.md](./README.md)
+![macOS Support](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square&logo=apple)
+![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
+![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**Before using this app: your iPhone / iPad must have Developer Mode enabled.**  
-**If this project helps you, you can support its development here: Ko-fi: https://ko-fi.com/agocia**
+**A powerful GPS spoofing utility for iOS devices, built exclusively for macOS.**  
+Inject simulated coordinates into iPhone/iPad over USB or Wi-Fi. Supports native execution on Apple Silicon (M1/M2/M3) and Intel Macs.
 
 ---
 
-## Requirements
+## ✨ Features
+
+- 🚀 **Instant Setup**: Plug & play, supports both USB and Wi-Fi Tunneling.
+- 🗺️ **Three Operation Modes**:
+  - **A-B Route**: Auto-calculates routes with realistic movement.
+  - **Pin Mode**: Fixed location spoofing with a single click.
+  - **Multi-Waypoints**: Customize complex paths for precise control.
+- 📍 **KML Overlays**: Import `.kml` files to display custom POIs (PurePoint).
+- ⚙️ **No Jailbreak Required**: Works entirely within iOS "Developer Mode."
+- 💻 **All-in-One**: No need to install Python, Homebrew, or external packages.
+
+---
+
+## 🛠️ Requirements
 
 | Item | Requirement |
 |------|-------------|
-| macOS | macOS 13 Ventura or later |
-| iPhone / iPad | iOS 16 or later, with Developer Mode enabled |
-| Connection | USB or Wi-Fi (same network) |
-| Other | No need to install Python, Homebrew, or any extra packages |
+| **macOS** | 13.0 Ventura or later (Universal Binary) |
+| **iOS / iPadOS** | 16.0 or later (Developer Mode enabled) |
+| **Connection** | USB (for pairing) or Wi-Fi (same network) |
 
 ---
 
-## Installation
+## 🚀 Quick Start
 
-### Option 1: Download the DMG (Recommended)
+1. **Enable Developer Mode**: `Settings` → `Privacy & Security` → `Developer Mode` → `On`.
+2. **Trust the Mac**: Connect via USB, unlock your phone, and tap "Trust."
+3. **Launch flyflyfly**: Choose connection mode and click **"Start Connection."**
+4. **Spoof Location**: Select a point on the map and click "Start."
 
-1. Go to the [Releases](../../releases) page and download the latest `flyflyfly.dmg`
-2. Open the DMG and drag `flyflyfly.app` into the `Applications` folder
-3. When launching it for the first time, right-click the app, choose `Open`, and confirm to bypass Gatekeeper
+---
+
+## 📦 Installation
+
+### Option 1: DMG (Recommended)
+Download the latest `flyflyfly.dmg` from the [Releases](../../releases) page and drag it to your Applications folder.
 
 ### Option 2: Build from Source
-
 ```bash
 git clone https://github.com/agocia/flyflyfly.git
 cd flyflyfly
@@ -38,125 +58,10 @@ xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release
 
 ---
 
-## Before You Start
-
-### iPhone / iPad Setup
-
-1. **Enable Developer Mode** (iOS 16+)  
-   Go to `Settings` → `Privacy & Security` → `Developer Mode` → turn it on → restart the device
-
-2. **Trust this Mac** (first USB connection)  
-   After connecting via USB, your iPhone will ask whether to trust this computer. Tap `Trust` and enter your passcode.
-
-3. **Extra step for Wi-Fi connection**  
-   You must complete the trust pairing once over USB before switching to Wi-Fi mode.
+## ⚖️ Disclaimer
+This tool is for development testing and privacy protection only. Users are responsible for any actions that violate terms of service (e.g., game cheating or fraud).
 
 ---
 
-## How to Use
-
-### Step 1: Connect Your Device
-
-**USB connection (default):**
-1. Connect your iPhone / iPad with a USB cable
-2. Open flyflyfly
-3. In the sidebar, make sure `USB` is selected in the connection mode switcher
-4. Click `Start Connection`
-5. If prompted, enter your Mac administrator password (required to create the tunnel)
-
-**Wi-Fi connection:**
-1. Make sure your iPhone and Mac are on the same Wi-Fi network
-2. Open flyflyfly
-3. Switch the connection mode in the sidebar to `Wi-Fi`
-4. Click `Start Connection`
-
-> If your device is already connected over USB, you can switch directly to Wi-Fi. The app will automatically disconnect the current session and rebuild the tunnel over Wi-Fi.
-
-> After a successful connection, the sidebar will show `Connected` along with the device name.  
-> If the USB cable is unplugged or the Wi-Fi tunnel is interrupted, the app will automatically switch to a disconnected state and stop continuous movement until you reconnect.
-
----
-
-### Step 2: Choose an Operation Mode
-
-Use the segmented control at the top of the sidebar to switch between three modes:
-
-| Mode | Description |
-|------|-------------|
-| **A-B** | Click a start point A and an end point B on the map, and the app will calculate a route and move along it automatically |
-| **Pin** | Stay fixed at a single selected coordinate on the map |
-| **Multi-Point** | Select multiple route points in order and move through them one by one |
-
----
-
-### Step 3: Set the Location
-
-**A-B Route Mode:**
-1. Click the map to set point A, then click `Confirm A`
-2. Click the map to set point B, then click `Confirm B`
-3. Choose a route and click `Start Moving`
-4. Adjust speed (km/h) and whether the route should loop
-
-**Pin Mode:**
-1. Click the target location on the map
-2. Click `Pin This Location`
-3. GPS will stay fixed at that point
-
-**Multi-Point Mode:**
-1. Click multiple route points on the map in order
-2. Click `Start Moving`
-
-> You can also type an address or place name in the search bar to jump directly to a location.
-
----
-
-### Step 4: Stop Spoofing
-
-Click `Stop` or `Clear Route` to stop GPS spoofing and return the device to its real location.
-
----
-
-## PurePoint Overlay
-
-You can import KML geographic data and display custom markers on the map:
-
-1. Click `Import KML` in the sidebar
-2. Select a `.kml` file
-3. The overlay will appear on the map, and you can filter markers by category
-
----
-
-## Troubleshooting
-
-**Q: The app keeps loading after I click "Start Connection".**  
-A: Make sure the iPhone is unlocked and the Mac is trusted. For Wi-Fi mode, confirm both devices are on the same network.
-
-**Q: Why am I asked for the administrator password?**  
-A: This is expected. Creating the tunnel requires temporary root privileges.
-
-**Q: Wi-Fi connection failed and it switched back to USB.**  
-A: The app automatically falls back to USB. If you want Wi-Fi specifically, make sure both devices are on the same network and your firewall is not blocking the connection.
-
-**Q: I am already connected over USB. Can I switch directly to Wi-Fi?**  
-A: Yes. Just change the connection mode in the sidebar to `Wi-Fi`, and the app will automatically disconnect the current USB session and rebuild the tunnel over Wi-Fi.
-
-**Q: Why does the app stop moving after I unplug the phone?**  
-A: This is normal behavior. When the tunnel or device connection is interrupted, the app immediately marks the device as disconnected and stops the simulation to avoid fake movement continuing in the background.
-
-**Q: GPS did not return to normal after stopping.**  
-A: Click `Clear Location Points` or restart location services on the iPhone.
-
-**Q: Connection fails on iOS 17 or later.**  
-A: Make sure Developer Mode is enabled and that the device has already been trusted in Xcode or Finder.
-
----
-
-## Disclaimer
-
-This tool is intended only for legitimate use cases such as development testing and privacy protection. Do not use it for fraud, game cheating, or any activity that violates terms of service. Users are solely responsible for their actions.
-
----
-
-## License
-
-MIT License - see [LICENSE](LICENSE)
+## ☕ Support
+If this project helps you, consider supporting its development via [Ko-fi](https://ko-fi.com/agocia).
