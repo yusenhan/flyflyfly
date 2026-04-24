@@ -11,9 +11,11 @@ project.xcworkspace/xcshareddata/swiftpm/configuration/control-cache
 xcuserdata/
 *.xccheckout
 *.moved-aside
-DerivedData
-*.xcuserstate
 *.xcscmblueprint
+
+# Bundled Binaries (Should be built locally via scripts)
+#
+bundled/
 
 # Python
 #
@@ -23,9 +25,13 @@ __pycache__/
 .venv/
 venv/
 ENV/
-build/
 dist/
 
 # OS X
 #
 .DS_Store
+
+# Temporary Files
+#
+*.swp
+*.lock
