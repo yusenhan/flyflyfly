@@ -28,6 +28,50 @@ This lightweight utility enables developers and users on Apple Silicon (M1/M2/M3
 
 ---
 
+## ⚙️ Technical Workflow
+
+**flyflyfly** orchestrates a seamless location injection flow from macOS to iOS:
+
+```mermaid
+graph TD
+    %% Roles
+    subgraph UI_Layer [SwiftUI UI Layer]
+        A[ContentView / Sidebar] -->|1. Select Mode| B(AppViewModel)
+        A -->|4. Set Coords/Route| B
+        A -->|6. Click Start| B
+    end
+
+    subgraph Logic_Layer [Core Logic Layer]
+        B -->|2. Req Connection| C{DeviceManager}
+        
+        subgraph Connection_Process [Tunneling & Connectivity]
+            C -->|USB| D[USBMuxD Discovery]
+            C -->|Wi-Fi| E[mDNS / ZeroConf Search]
+            D & E --> F[Build RSD Tunnel]
+            F -->|Invoke| G[bundled/pymobiledevice3]
+            G -->|Elevate| H[macOS Password Prompt]
+            H -->|Success| I[Established Tunnel]
+        end
+
+        B -->|5. Path Planning| J[RouteMotionEngine]
+        J -->|Interpolation| K[Smooth Coords Stream]
+    end
+
+    subgraph Service_Layer [Service & Background Process]
+        I -->|3. Status Update| B
+        B -->|7. Start Stream| L[DVTLocationStream]
+        L -->|Data Pipe| M[bundled/dvt-location-stream]
+        K -->|Real-time Push| L
+    end
+
+    subgraph iOS_Device [iOS Device]
+        M -->|DVT Instruments| N[iOS Location Subsystem]
+        N -->|Override GPS| O[Third-party Apps / Games]
+    end
+```
+
+---
+
 ## 🛠️ Technical Specifications
 
 | Item | Details |

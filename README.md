@@ -28,6 +28,50 @@ English Version: [English README](./README.en.md)
 
 ---
 
+## ⚙️ 技術工作流程 (Technical Workflow)
+
+**flyflyfly** 透過高度整合的自動化流程，實現了從 macOS 到 iOS 的無縫定位注入：
+
+```mermaid
+graph TD
+    %% 角色定義
+    subgraph UI_Layer [SwiftUI 介面層]
+        A[ContentView / Sidebar] -->|1. 選擇連線模式| B(AppViewModel)
+        A -->|4. 設定座標/路徑| B
+        A -->|6. 點擊開始移動| B
+    end
+
+    subgraph Logic_Layer [核心邏輯層]
+        B -->|2. 要求連線| C{DeviceManager}
+        
+        subgraph Connection_Process [連線與隧道建立]
+            C -->|USB| D[USBMuxD 偵測]
+            C -->|Wi-Fi| E[mDNS / ZeroConf 搜尋]
+            D & E --> F[建立 RSD Tunnel]
+            F -->|呼叫| G[bundled/pymobiledevice3]
+            G -->|要求權限| H[macOS 密碼提示]
+            H -->|成功| I[建立實體通道]
+        end
+
+        B -->|5. 規劃路徑| J[RouteMotionEngine]
+        J -->|座標插值運算| K[平滑座標串流]
+    end
+
+    subgraph Service_Layer [外部執行緒/服務層]
+        I -->|3. 回傳裝置狀態| B
+        B -->|7. 啟動串流| L[DVTLocationStream]
+        L -->|傳遞座標資料| M[bundled/dvt-location-stream]
+        K -->|即時推送| L
+    end
+
+    subgraph iOS_Device [iOS 裝置端]
+        M -->|DVT Instruments 協議| N[iOS 定位服務系統]
+        N -->|覆蓋真實 GPS| O[第三方 App / 遊戲]
+    end
+```
+
+---
+
 ## 🛠️ 技術指標與相容性
 
 | 項目 | 支援規格 |
