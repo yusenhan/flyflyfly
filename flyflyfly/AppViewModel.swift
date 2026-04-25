@@ -1,207 +1,1088 @@
-import SwiftUI
-import MapKit
 import Combine
+import Foundation
+import MapKit
+import SwiftUI
+
+private final class MultiPointRouteAccumulator: @unchecked Sendable {
+    var combinedPoints: [CLLocationCoordinate2D] = []
+    var totalDistance: Double = 0
+}
+
+private final class UnsafeSendableBox<T>: @unchecked Sendable {
+    let value: T
+
+    init(_ value: T) {
+        self.value = value
+    }
+}
+
+// MARK: - OSM Helper Models
+
+private struct OSMSearchResult: Codable {
+    let lat: String
+    let lon: String
+    let display_name: String
+    
+    func toMKMapItem() -> MKMapItem {
+        let latitude = Double(lat) ?? 0.0
+        let longitude = Double(lon) ?? 0.0
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        
+        let placemark = MKPlacemark(coordinate: coordinate, addressDictionary: [
+            "FormattedAddressLines": [display_name]
+        ])
+        
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = display_name.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces)
+        return mapItem
+    }
+}
 
 @MainActor
 final class AppViewModel: ObservableObject {
-    // MARK: - Core Dependencies
+    // MARK: - Sub-Stores
     let deviceStore: DeviceStore
-    let mapStateStore: MapStateStore
     let simulationStore: SimulationStore
-    let locationSearchService: LocationSearchService
+    let mapStateStore: MapStateStore
+    let purePointStore: PurePointStore
+    let favoriteStore: FavoriteStore
     
-    var deviceManager: DeviceManager { deviceStore.deviceManager as! DeviceManager }
-    var favoriteStore = FavoriteStore()
-    private var cancellables = Set<AnyCancellable>()
+    // MARK: - Dependencies
+    let deviceManager: any DeviceControlling
+    let locationSearchService: any LocationSearching
+
+    // MARK: - Draft workflow (Delegated)
+    var appState: AppState {
+        get { mapStateStore.appState }
+        set { mapStateStore.appState = newValue }
+    }
+    var operationMode: OperationMode {
+        get { mapStateStore.operationMode }
+        set { mapStateStore.operationMode = newValue }
+    }
+    var pendingModeSwitch: OperationMode? {
+        get { mapStateStore.pendingModeSwitch }
+        set { mapStateStore.pendingModeSwitch = newValue }
+    }
+
+    var pointA: CLLocationCoordinate2D? {
+        get { mapStateStore.pointA }
+        set { mapStateStore.pointA = newValue }
+    }
+    var pointB: CLLocationCoordinate2D? {
+        get { mapStateStore.pointB }
+        set { mapStateStore.pointB = newValue }
+    }
+    var tempCoordinate: CLLocationCoordinate2D? {
+        get { mapStateStore.tempCoordinate }
+        set { mapStateStore.tempCoordinate = newValue }
+    }
+    var waypoints: [CLLocationCoordinate2D] {
+        get { mapStateStore.waypoints }
+        set { mapStateStore.waypoints = newValue }
+    }
+    var customRoutePolyline: MKPolyline? {
+        get { mapStateStore.customRoutePolyline }
+        set { mapStateStore.customRoutePolyline = newValue }
+    }
+    var routes: [MKRoute] {
+        get { mapStateStore.routes }
+        set { mapStateStore.routes = newValue }
+    }
+    var selectedRouteIndex: Int {
+        get { mapStateStore.selectedRouteIndex }
+        set { mapStateStore.selectedRouteIndex = newValue }
+    }
+    var transportType: TransportType {
+        get { mapStateStore.transportType }
+        set { mapStateStore.transportType = newValue }
+    }
+    var draftRoutePoints: [CLLocationCoordinate2D] {
+        get { mapStateStore.draftRoutePoints }
+        set { mapStateStore.draftRoutePoints = newValue }
+    }
+    var draftCumulativeRouteDistances: [Double] {
+        get { mapStateStore.draftCumulativeRouteDistances }
+        set { mapStateStore.draftCumulativeRouteDistances = newValue }
+    }
+    var draftTotalRouteDistance: Double {
+        get { mapStateStore.draftTotalRouteDistance }
+        set { mapStateStore.draftTotalRouteDistance = newValue }
+    }
+
+    // MARK: - Active route / simulation (Delegated)
+    var activeOperationMode: OperationMode {
+        get { simulationStore.activeOperationMode }
+        set { simulationStore.activeOperationMode = newValue }
+    }
+    var activeRoutePolyline: MKPolyline? {
+        get { simulationStore.activeRoutePolyline }
+        set { simulationStore.activeRoutePolyline = newValue }
+    }
+    var currentPosition: CLLocationCoordinate2D? {
+        get { simulationStore.currentPosition }
+        set { simulationStore.currentPosition = newValue }
+    }
+    var currentRoutePoints: [CLLocationCoordinate2D] {
+        get { simulationStore.currentRoutePoints }
+        set { simulationStore.currentRoutePoints = newValue }
+    }
+    var cumulativeRouteDistances: [Double] {
+        get { simulationStore.cumulativeRouteDistances }
+        set { simulationStore.cumulativeRouteDistances = newValue }
+    }
+    var traveledDistance: Double {
+        get { simulationStore.traveledDistance }
+        set { simulationStore.traveledDistance = newValue }
+    }
+    var totalRouteDistance: Double {
+        get { simulationStore.totalRouteDistance }
+        set { simulationStore.totalRouteDistance = newValue }
+    }
+    var activeIsClosedLoop: Bool {
+        get { simulationStore.activeIsClosedLoop }
+        set { simulationStore.activeIsClosedLoop = newValue }
+    }
+    var activeIsEndlessLoop: Bool {
+        get { simulationStore.activeIsEndlessLoop }
+        set { simulationStore.activeIsEndlessLoop = newValue }
+    }
+    var isActiveSimulationRunning: Bool {
+        get { simulationStore.isActiveSimulationRunning }
+        set { simulationStore.isActiveSimulationRunning = newValue }
+    }
+    var shouldResumeActiveAfterReconnect: Bool {
+        get { simulationStore.shouldResumeActiveAfterReconnect }
+        set { simulationStore.shouldResumeActiveAfterReconnect = newValue }
+    }
     
-    // MARK: - Published States
-    @Published var isSearching = false
-    @Published var placeKeyword = ""
-    @Published var coordinateInputText = ""
-    @Published var locationInputError: String? = nil
-    @Published var isShowingRouteReplacementConfirmation = false
-    @Published var showingNewRouteConfirmation = false
-    var requestCameraPosition: ((MKCoordinateRegion) -> Void)? = nil
+    @Published var isShowingRouteReplacementConfirmation: Bool = false
+    private var multiPointTask: Task<Void, Never>?
+
+    // MARK: - Settings (Delegated)
+    var speed: Double {
+        get { simulationStore.speed }
+        set { simulationStore.speed = newValue }
+    }
+    var isEndlessLoop: Bool {
+        get { simulationStore.isEndlessLoop }
+        set { simulationStore.isEndlessLoop = newValue }
+    }
+    var isClosedLoop: Bool {
+        get { simulationStore.isClosedLoop }
+        set { simulationStore.isClosedLoop = newValue }
+    }
+
+    // MARK: - Location input (Delegated)
+    var placeKeyword: String {
+        get { mapStateStore.placeKeyword }
+        set { mapStateStore.placeKeyword = newValue }
+    }
+    var placeResults: [MKMapItem] {
+        get { mapStateStore.placeResults }
+        set { mapStateStore.placeResults = newValue }
+    }
+    var coordinateInputText: String {
+        get { mapStateStore.coordinateInputText }
+        set { mapStateStore.coordinateInputText = newValue }
+    }
+    var locationInputError: String? {
+        get { mapStateStore.locationInputError }
+        set { mapStateStore.locationInputError = newValue }
+    }
+
+    // MARK: - Map camera (Delegated)
+    var mapRegion: MKCoordinateRegion {
+        get { mapStateStore.mapRegion }
+        set { mapStateStore.mapRegion = newValue }
+    }
+    var visibleMapRegion: MKCoordinateRegion {
+        get { mapStateStore.visibleMapRegion }
+        set { mapStateStore.visibleMapRegion = newValue }
+    }
+    var requestCameraPosition: ((MKCoordinateRegion) -> Void)? {
+        get { mapStateStore.requestCameraPosition }
+        set { mapStateStore.requestCameraPosition = newValue }
+    }
+
+    // MARK: - Pure Point (Delegated)
+    var availableOverlays: [PurePointOverlay] {
+        get { purePointStore.availableOverlays }
+        set { purePointStore.availableOverlays = newValue }
+    }
+    var selectedOverlayIDs: Set<String> {
+        get { purePointStore.selectedOverlayIDs }
+        set { purePointStore.selectedOverlayIDs = newValue }
+    }
+    var renderedPurePoints: [VisiblePurePoint] {
+        get { purePointStore.renderedPurePoints }
+        set { purePointStore.renderedPurePoints = newValue }
+    }
+    var isPurePointLoading: Bool { purePointStore.isLoading }
+    @Published var isSearching: Bool = false
+    var purePointRenderState: PurePointRenderState { purePointStore.renderState }
+
+    // MARK: - Private state
+    private var cancellables: Set<AnyCancellable> = []
+    private var stateBeforeConfirm: AppState = .selectingA
+    
+    // MARK: - Compatibility accessors for View
+    var dependencyVersion: Int { deviceStore.dependencyVersion }
+    var isConnected: Bool { deviceStore.isConnected }
+    var isConnecting: Bool { deviceStore.isConnecting }
+    var connectionStage: String { deviceStore.connectionStage }
+    var deviceName: String { deviceStore.deviceName }
+    var lastError: String? { deviceStore.lastError }
+    var manualRsdHost: String {
+        get { deviceManager.manualRsdHost }
+        set { deviceManager.manualRsdHost = newValue }
+    }
+    var manualRsdPort: String {
+        get { deviceManager.manualRsdPort }
+        set { deviceManager.manualRsdPort = newValue }
+    }
+    var tunnelUDID: String {
+        get { deviceManager.tunnelUDID }
+        set { deviceManager.tunnelUDID = newValue }
+    }
+    var isWirelessMode: Bool {
+        get { deviceManager.isWirelessMode }
+        set { deviceManager.isWirelessMode = newValue }
+    }
     var developerModeDisabled: Bool { deviceManager.developerModeDisabled }
-    var placeResults: [MKLocalSearchCompletion] { locationSearchService.completions }
+    var debugLog: [String] { deviceManager.debugLog }
 
-    // MARK: - Delegation (MapStateStore)
-    var appState: AppState { get { mapStateStore.appState } set { mapStateStore.appState = newValue } }
-    var operationMode: OperationMode { get { mapStateStore.operationMode } set { mapStateStore.operationMode = newValue } }
-    var transportType: TransportType { get { mapStateStore.transportType } set { mapStateStore.transportType = newValue } }
-    var pointA: CLLocationCoordinate2D? { get { mapStateStore.pointA } set { mapStateStore.pointA = newValue } }
-    var pointB: CLLocationCoordinate2D? { get { mapStateStore.pointB } set { mapStateStore.pointB = newValue } }
-    var tempCoordinate: CLLocationCoordinate2D? { get { mapStateStore.tempCoordinate } set { mapStateStore.tempCoordinate = newValue } }
-    var waypoints: [CLLocationCoordinate2D] { get { mapStateStore.waypoints } set { mapStateStore.waypoints = newValue } }
-    var routes: [MKRoute] { get { mapStateStore.routes } set { mapStateStore.routes = newValue } }
-    var selectedRouteIndex: Int { get { mapStateStore.selectedRouteIndex } set { mapStateStore.selectedRouteIndex = newValue } }
-    var mapRegion: MKCoordinateRegion { get { mapStateStore.mapRegion } set { mapStateStore.mapRegion = newValue } }
-    var visibleMapRegion: MKCoordinateRegion { get { mapStateStore.visibleMapRegion } set { mapStateStore.visibleMapRegion = newValue } }
-    var customRoutePolyline: MKPolyline? { mapStateStore.customRoutePolyline }
-
-    // Simulation Delegation
-    var speed: Double { get { simulationStore.speed } set { simulationStore.speed = newValue } }
-    var isEndlessLoop: Bool { get { simulationStore.isEndlessLoop } set { simulationStore.isEndlessLoop = newValue } }
-    var isClosedLoop: Bool { get { simulationStore.isClosedLoop } set { simulationStore.isClosedLoop = newValue } }
-    var currentPosition: CLLocationCoordinate2D? { simulationStore.currentPosition }
-    var totalRouteDistance: Double { simulationStore.totalRouteDistance }
-    var traveledDistance: Double { simulationStore.traveledDistance }
-    var isActiveSimulationRunning: Bool { simulationStore.isActiveSimulationRunning }
-    var activeRoutePolyline: MKPolyline? { simulationStore.activeRoutePolyline }
-    var activeOperationMode: OperationMode? { simulationStore.activeOperationMode }
+    let maximumSpeed = AppConstants.Simulation.maximumSpeed
 
     // MARK: - Initialization
-    init(deviceManager: DeviceManager, locationSearchService: LocationSearchService) {
-        self.deviceStore = DeviceStore(deviceManager: deviceManager)
-        self.mapStateStore = MapStateStore()
-        self.simulationStore = SimulationStore(deviceManager: deviceManager)
-        self.locationSearchService = locationSearchService
-        setupObservers()
-    }
-
-    private func setupObservers() {
-        deviceStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        mapStateStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        simulationStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        LanguageManager.shared.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-    }
-
-    // MARK: - UI Localization
-    var buttonTitle: String {
-        let key: String
-        if !deviceManager.isConnected && (hasReadyDraft || hasActiveRouteSnapshot) { key = "Connect Device First" }
-        else if shouldUseDraftControls {
-            if hasActiveRouteSnapshot && hasReadyDraft { key = "Start New Route" }
-            else { return NSLocalizedString(draftButtonKey, comment: "") }
-        } else {
-            key = isActiveSimulationRunning ? "Stop Simulation" : "Resume Simulation"
-        }
-        return NSLocalizedString(key, comment: "")
-    }
     
-    private var draftButtonKey: String {
-        if operationMode == .fixedPoint {
-            switch appState {
-            case .selectingA, .confirmingA: return "Select Location Point"
-            case .readyToMove: return "Start Positioning"
-            case .moving: return "Set Location"
-            default: return "Start Positioning"
+    init(deviceManager: any DeviceControlling, locationSearchService: any LocationSearching) {
+        self.deviceManager = deviceManager
+        self.locationSearchService = locationSearchService
+        
+        let mapStore = MapStateStore()
+        self.mapStateStore = mapStore
+        self.deviceStore = DeviceStore(deviceManager: deviceManager)
+        self.simulationStore = SimulationStore(deviceManager: deviceManager)
+        self.purePointStore = PurePointStore(mapStateStore: mapStore)
+        self.favoriteStore = FavoriteStore()
+        
+        // Link changes from stores to AppViewModel to trigger View updates
+        deviceStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        simulationStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        mapStateStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        purePointStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        favoriteStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        
+        setupSearchDebounce()
+        setupDeviceObservers()
+    }
+
+    // MARK: - Favorites helper
+    func addToFavorites(name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType? = nil) {
+        favoriteStore.add(name: name, type: type, coordinates: coordinates, transportType: transportType)
+    }
+
+    func selectFavorite(_ item: FavoriteItem) {
+        resetDraft(clearActive: false)
+        
+        switch item.type {
+        case .point:
+            operationMode = .fixedPoint
+            if let coord = item.coordinates.first?.clCoordinate {
+                handleMapTap(at: coord)
+            }
+        case .route:
+            if item.coordinates.count == 2 {
+                operationMode = .routeAB
+                let start = item.coordinates[0].clCoordinate
+                let end = item.coordinates[1].clCoordinate
+                
+                pointA = start
+                pointB = end
+                if let transport = item.transportType {
+                    self.transportType = transport
+                }
+                calculateRoute()
+                centerMap(on: start)
+            } else if item.coordinates.count > 2 {
+                operationMode = .multiPoint
+                waypoints = item.coordinates.map { $0.clCoordinate }
+                if let transport = item.transportType {
+                    self.transportType = transport
+                }
+                calculateMultiPointRoute()
+                if let first = waypoints.first {
+                    centerMap(on: first)
+                }
             }
         }
-        if operationMode == .multiPoint && appState == .selectingA {
-            return waypoints.count >= 2 ? "Complete and Calculate" : "Select at least 2 points"
+    }
+
+    private func setupDeviceObservers() {
+        deviceManager.objectWillChange.sink { [weak self] _ in
+            guard let self = self else { return }
+            if self.deviceManager.isConnected && self.shouldResumeActiveAfterReconnect {
+                self.startIfReadyAndConnected()
+            }
+        }.store(in: &cancellables)
+    }
+
+    // MARK: - Logic (Moved/Refactored)
+
+    var selectedRoute: MKRoute? {
+        guard !routes.isEmpty else { return nil }
+        if routes.indices.contains(selectedRouteIndex) {
+            return routes[selectedRouteIndex]
         }
-        switch appState {
-        case .selectingA: return "Select Start"
-        case .selectingB: return "Select End"
-        case .confirmingA, .confirmingB: return "Confirm Position"
-        case .routeSelection, .readyToMove, .calculatingRoute: return "Start Movement"
-        case .moving: return "Stop Simulation"
-        default: return "Start Simulation"
+        return routes.first
+    }
+
+    var pinnedCoordinate: CLLocationCoordinate2D? {
+        currentPosition ?? simulationStore.lastSentPosition
+    }
+
+    var hasActiveRouteSnapshot: Bool {
+        activeRoutePolyline != nil || (activeOperationMode == .fixedPoint && currentPosition != nil)
+    }
+
+    var hasDraftPreview: Bool {
+        !routes.isEmpty
+            || (customRoutePolyline?.pointCount ?? 0) > 1
+            || draftRoutePoints.count > 1
+    }
+
+    var hasDraftEdits: Bool {
+        appState != .selectingA
+            || pointA != nil
+            || pointB != nil
+            || tempCoordinate != nil
+            || !waypoints.isEmpty
+            || hasDraftPreview
+    }
+
+    var hasReadyDraft: Bool {
+        guard appState == .readyToMove || appState == .routeSelection || appState == .moving else { return false }
+        switch operationMode {
+        case .fixedPoint:
+            return pointA != nil
+        case .routeAB, .multiPoint:
+            // Ensure we have actual points from a route or custom line
+            return !draftRoutePoints.isEmpty || selectedRoute != nil || customRoutePolyline != nil
         }
+    }
+
+    var shouldUseDraftControls: Bool {
+        !hasActiveRouteSnapshot || hasDraftEdits
+    }
+
+    var shouldShowResetButton: Bool {
+        hasDraftEdits
     }
 
     var resetButtonTitle: String {
-        let key = hasActiveRouteSnapshot ? "Clear Draft" : (operationMode == .fixedPoint ? "Clear Point" : "Clear Route")
-        return NSLocalizedString(key, comment: "")
+        if hasActiveRouteSnapshot {
+            return "清除草稿路線"
+        }
+        return operationMode == .fixedPoint ? "清除定位點" : "清除目前路線"
     }
 
     var activityNotice: String? {
-        if hasActiveRouteSnapshot && hasDraftEdits { return NSLocalizedString("Simulation running notice", comment: "") }
-        if hasActiveRouteSnapshot && !isActiveSimulationRunning { return NSLocalizedString("Simulation fixed notice", comment: "") }
+        if hasActiveRouteSnapshot && hasDraftEdits {
+            return "目前藍線持續運作中，正在編輯黃線草稿。"
+        }
+        if hasActiveRouteSnapshot && !isActiveSimulationRunning {
+            return "目前藍線已停止移動，但定位仍固定在裝置上。"
+        }
         return nil
     }
 
     var estimatedTime: String {
-        let dist = selectedRoute?.distance ?? (mapStateStore.draftTotalRouteDistance > 0 ? mapStateStore.draftTotalRouteDistance : totalRouteDistance)
-        guard dist > 0 else { return "--" }
-        let sec = dist / (speed * (1000.0 / 3600.0))
-        return "\(Int(sec)/60):\(String(format: "%02d", Int(sec)%60))"
+        let distance: Double
+        if let route = selectedRoute {
+            distance = route.distance
+        } else if draftTotalRouteDistance > 0 {
+            distance = draftTotalRouteDistance
+        } else if totalRouteDistance > 0 {
+            distance = totalRouteDistance
+        } else {
+            return "--"
+        }
+        let timeSeconds = distance / (speed * (1000.0 / 3600.0))
+        if timeSeconds.isInfinite || timeSeconds.isNaN { return "--" }
+        return "\(Int(timeSeconds) / 60) 分 \(Int(timeSeconds) % 60) 秒"
     }
 
     var progressPercentage: String? {
         guard isActiveSimulationRunning, totalRouteDistance > 0 else { return nil }
-        return String(format: "%.1f%%", min(traveledDistance / totalRouteDistance, 1.0) * 100)
-    }
-
-    // MARK: - Logic Helpers
-    var hasActiveRouteSnapshot: Bool { activeRoutePolyline != nil || (simulationStore.activeOperationMode == .fixedPoint && currentPosition != nil) }
-    var hasDraftEdits: Bool { appState != .selectingA || pointA != nil || pointB != nil || !waypoints.isEmpty || tempCoordinate != nil }
-    var hasReadyDraft: Bool { operationMode == .fixedPoint ? pointA != nil : (!mapStateStore.draftRoutePoints.isEmpty || !routes.isEmpty) }
-    var shouldUseDraftControls: Bool { !hasActiveRouteSnapshot || hasDraftEdits }
-    var shouldShowResetButton: Bool { hasDraftEdits }
-    var isMainActionDisabled: Bool {
-        if !deviceManager.isConnected { return true }
-        if shouldUseDraftControls {
-            if operationMode == .multiPoint && appState == .selectingA { return waypoints.count < 2 }
-            return appState == .selectingA || appState == .selectingB
-        }
-        return false
-    }
-    var isMainActionDestructive: Bool { !shouldUseDraftControls && isActiveSimulationRunning }
-    var pinnedCoordinate: CLLocationCoordinate2D? { currentPosition ?? simulationStore.lastSentPosition }
-    var selectedRoute: MKRoute? { routes.indices.contains(selectedRouteIndex) ? routes[selectedRouteIndex] : routes.first }
-    var maximumSpeed: Double { AppConstants.Simulation.maximumSpeed }
-
-    // MARK: - UI Handlers
-    func handleMainAction() {
-        if shouldUseDraftControls {
-            if hasActiveRouteSnapshot && hasReadyDraft { isShowingRouteReplacementConfirmation = true; return }
-            startIfReadyAndConnected()
+        
+        if isEndlessLoop {
+            let cycleDistance = totalRouteDistance * 2.0
+            let phase = traveledDistance.truncatingRemainder(dividingBy: cycleDistance)
+            let isReturning = phase > totalRouteDistance
+            let current = isReturning ? (cycleDistance - phase) : phase
+            let percent = (current / totalRouteDistance) * 100
+            let direction = isReturning ? " (回程)" : " (去程)"
+            return String(format: "%.1f%%%@", percent, direction)
         } else {
-            if isActiveSimulationRunning { simulationStore.stopSimulation() }
-            else { simulationStore.startSimulation() }
+            let current = min(traveledDistance, totalRouteDistance)
+            let percent = (current / totalRouteDistance) * 100
+            return String(format: "%.1f%%", percent)
         }
     }
-    func startIfReadyAndConnected() { simulationStore.startSimulation() }
-    func resetAll() {
-        pointA = nil; pointB = nil; waypoints = []; routes = []; selectedRouteIndex = 0; tempCoordinate = nil; appState = .selectingA
+
+    var buttonTitle: String {
+        if !deviceManager.isConnected && (hasReadyDraft || hasActiveRouteSnapshot) {
+            return "請先連線裝置"
+        }
+        if shouldUseDraftControls {
+            if hasActiveRouteSnapshot && hasReadyDraft {
+                return "開始新路線"
+            }
+            return draftButtonTitle
+        }
+        return activeButtonTitle
     }
-    func recalculateRoute() { /* logic */ }
-    func switchModePreservingPinnedLocation() { /* logic */ }
-    func handleMapTap(at coord: CLLocationCoordinate2D) { /* logic */ }
-    func handleMapDoubleTap(at coord: CLLocationCoordinate2D) { /* logic */ }
-    func handleDeviceDisconnected() { deviceStore.disconnect() }
-    func handleScenePhaseChange(_ phase: ScenePhase) { /* implementation */ }
-    func handlePlaceKeywordChange(_ val: String) { locationSearchService.updateQuery(val, region: mapRegion) }
-    func searchPlaces(currentRegion: MKCoordinateRegion?) {
-        isSearching = true
-        Task {
-            do {
-                let items = try await locationSearchService.search(for: placeKeyword, region: currentRegion ?? mapRegion)
-                // Need to store items somewhere or assign to placeResults
-                isSearching = false
-            } catch {
-                isSearching = false
+
+    var isMainActionDisabled: Bool {
+        if shouldUseDraftControls {
+            return draftActionDisabled
+        }
+        return activeActionDisabled
+    }
+
+    var isMainActionDestructive: Bool {
+        !shouldUseDraftControls && isActiveSimulationRunning
+    }
+
+    private var draftButtonTitle: String {
+        if operationMode == .fixedPoint {
+            switch appState {
+            case .selectingA, .confirmingA: return "選擇定位點"
+            case .readyToMove: return "開始定位"
+            case .moving: return "設定定位點"
+            default: break
+            }
+        }
+        if operationMode == .multiPoint && appState == .selectingA {
+            return waypoints.count >= 2 ? "完成選點並計算路線" : "請先選至少 2 點"
+        }
+        switch appState {
+        case .selectingA: return "請先選擇起點"
+        case .selectingB: return "請先選擇終點"
+        case .confirmingA, .confirmingB: return "確認位置"
+        case .routeSelection: return "開始模擬移動"
+        case .readyToMove: return "開始模擬移動"
+        case .moving: return "停止模擬"
+        case .calculatingRoute: return "路線計算中..."
+        }
+    }
+
+    private var activeButtonTitle: String {
+        isActiveSimulationRunning ? "停止模擬" : "繼續模擬"
+    }
+
+    private var draftActionDisabled: Bool {
+        if !deviceManager.isConnected { return true }
+        if operationMode == .multiPoint && appState == .selectingA {
+            return waypoints.count < 2
+        }
+        return appState == .selectingA || appState == .selectingB
+    }
+
+    private var activeActionDisabled: Bool {
+        !deviceManager.isConnected
+    }
+
+    // MARK: - Actions
+
+    func connectDevice() { deviceStore.connect() }
+    func disconnect() { deviceStore.disconnect() }
+
+    func handleMainAction() {
+        if appState == .confirmingA || appState == .confirmingB {
+            confirmTempCoordinate()
+            return
+        }
+        
+        if shouldUseDraftControls {
+            if hasActiveRouteSnapshot && hasReadyDraft {
+                isShowingRouteReplacementConfirmation = true
+            } else {
+                startSimulationFromDraft()
+            }
+        } else {
+            if isActiveSimulationRunning {
+                simulationStore.stopSimulation()
+            } else {
+                simulationStore.continueSimulation()
             }
         }
     }
-    func selectCompletion(_ completion: MKLocalSearchCompletion) {
-        placeKeyword = completion.title
-        searchPlaces(currentRegion: mapRegion)
+
+    func confirmRouteReplacement() {
+        isShowingRouteReplacementConfirmation = false
+        startSimulationFromDraft()
     }
-    func selectSearchItem(_ item: MKMapItem) {
-        pointA = item.placemark.coordinate; appState = .confirmingA
+
+    func cancelRouteReplacement() {
+        isShowingRouteReplacementConfirmation = false
     }
-    func insertCoordinateFromInput() { /* logic */ }
-    func normalizeMapRegion(_ r: MKCoordinateRegion) -> MKCoordinateRegion { r }
-    func mapRegion(fitting coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion { mapRegion }
-    func confirmNewRoute() { isShowingRouteReplacementConfirmation = false; startIfReadyAndConnected() }
-    func cancelNewRoute() { isShowingRouteReplacementConfirmation = false }
-    func cancelRouteReplacement() { isShowingRouteReplacementConfirmation = false }
-    func confirmRouteReplacement() { confirmNewRoute() }
-    func cleanup() { simulationStore.stopSimulation() }
-    func addToFavorites(name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType?) {
-        favoriteStore.add(name: name, type: type, coordinates: coordinates, transportType: transportType)
+
+    private func startSimulationFromDraft() {
+        guard hasReadyDraft else { return }
+        
+        simulationStore.stopSimulation()
+        
+        activeOperationMode = operationMode
+        speed = simulationStore.speed
+        activeIsClosedLoop = isClosedLoop
+        activeIsEndlessLoop = isEndlessLoop
+        
+        if operationMode == .fixedPoint, let target = pointA {
+            currentPosition = target
+            appState = .moving
+            simulationStore.startPinnedLocationKeepAlive(at: target)
+            centerMap(on: target)
+            Task {
+                try? await deviceManager.sendLocationToDeviceAsync(latitude: target.latitude, longitude: target.longitude)
+            }
+        } else {
+            // CRITICAL: Ensure we use the latest points from selectedRoute OR custom polyline
+            if let route = selectedRoute {
+                currentRoutePoints = route.polyline.coordinates
+                totalRouteDistance = route.distance
+                activeRoutePolyline = route.polyline
+            } else if let custom = customRoutePolyline {
+                currentRoutePoints = custom.coordinates
+                totalRouteDistance = draftTotalRouteDistance
+                activeRoutePolyline = custom
+            } else {
+                currentRoutePoints = draftRoutePoints
+                totalRouteDistance = draftTotalRouteDistance
+                activeRoutePolyline = customRoutePolyline
+            }
+            
+            cumulativeRouteDistances = RouteMotionEngine.cumulativeDistances(for: currentRoutePoints)
+            appState = .moving
+            
+            if let start = currentRoutePoints.first {
+                centerMap(on: start)
+            }
+            simulationStore.startSimulation()
+        }
+        
+        resetDraft(clearActive: false)
     }
-    func selectFavorite(_ item: FavoriteItem) {
-        pointA = item.firstCoordinate; operationMode = item.type == .point ? .fixedPoint : .routeAB; appState = .confirmingA
+
+    func resetDraft(clearActive: Bool = true) {
+        pointA = nil
+        pointB = nil
+        tempCoordinate = nil
+        waypoints = []
+        routes = []
+        selectedRouteIndex = 0
+        customRoutePolyline = nil
+        draftRoutePoints = []
+        draftCumulativeRouteDistances = []
+        draftTotalRouteDistance = 0
+        locationInputError = nil
+        
+        if clearActive {
+            appState = .selectingA
+            simulationStore.stopSimulation()
+            activeRoutePolyline = nil
+            currentPosition = nil
+            currentRoutePoints = []
+            cumulativeRouteDistances = []
+            traveledDistance = 0
+            totalRouteDistance = 0
+            simulationStore.stopPinnedLocationKeepAlive()
+            
+            Task {
+                try? await deviceManager.clearSimulatedLocationAsync()
+            }
+        } else if appState != .moving {
+            appState = .selectingA
+        }
+    }
+
+    func resetAll() {
+        resetDraft(clearActive: true)
+    }
+
+    func handleMapDoubleTap(at coordinate: CLLocationCoordinate2D) {
+        if operationMode == .fixedPoint {
+            // Immediately execute positioning
+            pointA = coordinate
+            tempCoordinate = nil
+            currentPosition = coordinate
+            appState = .moving
+            
+            // Start keep-alive at this new point
+            simulationStore.startPinnedLocationKeepAlive(at: coordinate)
+            
+            // Send to device
+            Task {
+                try? await deviceManager.sendLocationToDeviceAsync(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            }
+            
+            centerMap(on: coordinate)
+            resetDraft(clearActive: false)
+        }
+    }
+
+    func handleMapTap(at coordinate: CLLocationCoordinate2D) {
+        if operationMode == .multiPoint {
+            if appState == .selectingA || appState == .readyToMove || appState == .calculatingRoute {
+                waypoints.append(coordinate)
+                if waypoints.count >= 2 {
+                    calculateMultiPointRoute()
+                }
+                centerMap(on: coordinate)
+                return
+            }
+        }
+        
+        switch appState {
+        case .selectingA, .confirmingA:
+            tempCoordinate = coordinate
+            stateBeforeConfirm = .selectingA
+            appState = .confirmingA
+            centerMap(on: coordinate)
+        case .selectingB, .confirmingB:
+            tempCoordinate = coordinate
+            stateBeforeConfirm = .selectingB
+            appState = .confirmingB
+            centerMap(on: coordinate)
+        case .moving:
+            if activeOperationMode == .fixedPoint {
+                currentPosition = coordinate
+                simulationStore.startPinnedLocationKeepAlive(at: coordinate)
+                centerMap(on: coordinate)
+                Task {
+                    try? await deviceManager.sendLocationToDeviceAsync(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                }
+            } else {
+                tempCoordinate = coordinate
+                stateBeforeConfirm = .moving
+                appState = .confirmingA
+                centerMap(on: coordinate)
+            }
+        default:
+            // Allow re-selecting even in other states if needed
+            tempCoordinate = coordinate
+            appState = .confirmingA
+            centerMap(on: coordinate)
+        }
+    }
+
+    func confirmTempCoordinate() {
+        guard let temp = tempCoordinate else { return }
+        if appState == .confirmingA {
+            pointA = temp
+            tempCoordinate = nil
+            if stateBeforeConfirm == .moving {
+                appState = .moving
+                currentPosition = temp
+                centerMap(on: temp)
+                
+                if operationMode == .fixedPoint {
+                    simulationStore.startPinnedLocationKeepAlive(at: temp)
+                } else if !isActiveSimulationRunning {
+                    // Start/Update keep-alive even in route mode if paused
+                    simulationStore.startPinnedLocationKeepAlive(at: temp)
+                }
+                
+                Task { try? await deviceManager.sendLocationToDeviceAsync(latitude: temp.latitude, longitude: temp.longitude) }
+            } else if operationMode == .fixedPoint {
+                appState = .readyToMove
+                centerMap(on: temp)
+            } else {
+                appState = .selectingB
+                centerMap(on: temp)
+            }
+        } else if appState == .confirmingB {
+            pointB = temp
+            tempCoordinate = nil
+            calculateRoute()
+            centerMap(on: temp)
+        }
+    }
+
+    func cancelTempCoordinate() {
+        tempCoordinate = nil
+        appState = stateBeforeConfirm
+    }
+
+    func recalculateRoute() {
+        if operationMode == .routeAB && pointA != nil && pointB != nil {
+            calculateRoute()
+        } else if operationMode == .multiPoint && waypoints.count >= 2 {
+            calculateMultiPointRoute()
+        }
+    }
+
+    func selectRoute(at index: Int) {
+        guard routes.indices.contains(index) else { return }
+        selectedRouteIndex = index
+        let route = routes[index]
+        draftRoutePoints = route.polyline.coordinates
+        draftCumulativeRouteDistances = RouteMotionEngine.cumulativeDistances(for: draftRoutePoints)
+        draftTotalRouteDistance = route.distance
+    }
+
+    private func calculateRoute() {
+        guard let a = pointA, let b = pointB else { return }
+        
+        let distance = RouteMotionEngine.fastDistance(from: a, to: b)
+        if distance < 2.0 {
+            fallbackToDirectLine(from: a, to: b)
+            return
+        }
+        
+        appState = .calculatingRoute
+        locationInputError = nil
+        
+        let primaryType = transportType.mkType
+        let secondaryType: MKDirectionsTransportType = (transportType == .automobile ? TransportType.walking : TransportType.automobile).mkType
+        
+        performRouteCalculation(source: a, destination: b, transportType: primaryType) { [weak self] success in
+            guard let self = self else { return }
+            if !success {
+                // Retry with secondary if primary fails
+                self.performRouteCalculation(source: a, destination: b, transportType: secondaryType) { success in
+                    if !success {
+                        self.locationInputError = "無法計算建議路線（可能是該區域無路徑數據），已自動改用直線模式。"
+                        self.fallbackToDirectLine(from: a, to: b)
+                    }
+                }
+            }
+        }
     }
     
-    // UI Stub Helpers
-    func searchResultSubtitle(for completion: MKLocalSearchCompletion) -> String { completion.subtitle }
-    func searchResultSubtitle(for item: MKMapItem) -> String { item.placemark.title ?? "" }
-    func searchResultDistanceText(for item: MKMapItem, cameraRegion: MKCoordinateRegion?) -> String? { nil }
+    private func performRouteCalculation(source: CLLocationCoordinate2D, destination: CLLocationCoordinate2D, transportType: MKDirectionsTransportType, completion: @escaping (Bool) -> Void) {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: source))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination))
+        request.transportType = transportType
+        request.requestsAlternateRoutes = (transportType == .automobile)
+        
+        let directions = MKDirections(request: request)
+        directions.calculate { [weak self] response, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if let routes = response?.routes, !routes.isEmpty {
+                    self.routes = routes
+                    self.selectRoute(at: 0)
+                    self.appState = .routeSelection
+                    self.locationInputError = nil // Clear any previous error
+                    
+                    // Auto-zoom to fit the route
+                    let allCoords = routes.flatMap { $0.polyline.coordinates }
+                    self.mapRegion = self.mapRegion(fitting: allCoords)
+                    
+                    completion(true)
+                } else {
+                    if let error = error {
+                        print("MapKit directions error (\(transportType == .walking ? "walking" : "auto")): \(error.localizedDescription)")
+                    }
+                    completion(false)
+                }
+            }
+        }
+    }
 
-    var dependencyVersion: String { "1.11.0" }
+    private func calculateMultiPointRoute() {
+        guard waypoints.count >= 2 else { return }
+        
+        multiPointTask?.cancel()
+        
+        let waypointsToUse = waypoints
+        let isClosed = isClosedLoop
+        let transportTypeToUse = self.transportType.mkType
+        let accumulator = MultiPointRouteAccumulator()
+        
+        appState = .calculatingRoute
+        locationInputError = nil
+        
+        multiPointTask = Task {
+            let count = waypointsToUse.count
+            let segments = isClosed ? count : (count - 1)
+            
+            await withTaskGroup(of: (Int, [CLLocationCoordinate2D], Double).self) { group in
+                for i in 0..<segments {
+                    let start = waypointsToUse[i]
+                    let end = waypointsToUse[(i + 1) % count]
+                    
+                    group.addTask {
+                        if RouteMotionEngine.fastDistance(from: start, to: end) < 2.0 {
+                            return (i, [start, end], RouteMotionEngine.fastDistance(from: start, to: end))
+                        }
+                        
+                        let request = MKDirections.Request()
+                        request.source = MKMapItem(placemark: MKPlacemark(coordinate: start))
+                        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: end))
+                        request.transportType = transportTypeToUse
+                        
+                        let directions = MKDirections(request: request)
+                        do {
+                            let response = try await directions.calculate()
+                            if let route = response.routes.first {
+                                return (i, route.polyline.coordinates, route.distance)
+                            }
+                        } catch {
+                            // Fallback to direct line on error
+                        }
+                        let dist = RouteMotionEngine.fastDistance(from: start, to: end)
+                        return (i, [start, end], dist)
+                    }
+                }
+                
+                var results = [(Int, [CLLocationCoordinate2D], Double)]()
+                for await result in group {
+                    results.append(result)
+                }
+                results.sort { $0.0 < $1.0 }
+                
+                for (_, coords, dist) in results {
+                    accumulator.combinedPoints.append(contentsOf: coords)
+                    accumulator.totalDistance += dist
+                }
+            }
+            
+            if Task.isCancelled { return }
+            
+            await MainActor.run {
+                if Task.isCancelled { return }
+                self.draftRoutePoints = accumulator.combinedPoints
+                self.draftTotalRouteDistance = accumulator.totalDistance
+                self.draftCumulativeRouteDistances = RouteMotionEngine.cumulativeDistances(for: self.draftRoutePoints)
+                self.customRoutePolyline = MKPolyline(coordinates: self.draftRoutePoints, count: self.draftRoutePoints.count)
+                
+                // Auto-zoom to fit all waypoints
+                self.mapRegion = self.mapRegion(fitting: self.draftRoutePoints)
+                
+                self.appState = .readyToMove
+            }
+        }
+    }
+
+    private func fallbackToDirectLine(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) {
+        let coords = [a, b]
+        customRoutePolyline = MKPolyline(coordinates: coords, count: 2)
+        draftRoutePoints = coords
+        draftTotalRouteDistance = RouteMotionEngine.fastDistance(from: a, to: b)
+        draftCumulativeRouteDistances = [0, draftTotalRouteDistance]
+        
+        // Auto-zoom
+        self.mapRegion = self.mapRegion(fitting: coords)
+        
+        appState = .readyToMove
+    }
+
+    func switchOperationMode(to mode: OperationMode) {
+        if hasActiveRouteSnapshot {
+            pendingModeSwitch = mode
+        } else {
+            operationMode = mode
+            resetDraft(clearActive: false)
+        }
+    }
+
+    func confirmModeSwitch() {
+        if let mode = pendingModeSwitch {
+            operationMode = mode
+            resetDraft(clearActive: true)
+            pendingModeSwitch = nil
+        }
+    }
+
+    func cancelModeSwitch() {
+        pendingModeSwitch = nil
+    }
+
+    // MARK: - Search Logic
+
+    private func setupSearchDebounce() {
+        mapStateStore.$placeKeyword
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] keyword in
+                guard !keyword.isEmpty else {
+                    self?.placeResults = []
+                    return
+                }
+                self?.searchPlaces(currentRegion: self?.visibleMapRegion)
+            }
+            .store(in: &cancellables)
+    }
+
+    func searchPlaces(currentRegion: MKCoordinateRegion?) {
+        let keyword = placeKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return }
+        
+        isSearching = true
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = keyword
+        if let region = currentRegion {
+            request.region = region
+        }
+        
+        let search = MKLocalSearch(request: request)
+        search.start { [weak self] response, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isSearching = false
+                if let items = response?.mapItems {
+                    self.placeResults = items
+                }
+            }
+        }
+    }
+
+    func selectCompletion(_ completion: MKLocalSearchCompletion) {
+        isSearching = true
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        
+        search.start { [weak self] response, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isSearching = false
+                if let item = response?.mapItems.first {
+                    self.selectSearchItem(item)
+                }
+            }
+        }
+    }
+
+    func selectSearchItem(_ item: MKMapItem) {
+        let coord = item.placemark.coordinate
+        placeKeyword = item.name ?? ""
+        placeResults = []
+        locationSearchService.completions = [] 
+        insertPoint(coord)
+    }
+
+    func coordinate(for item: MKMapItem) -> CLLocationCoordinate2D? {
+        item.placemark.coordinate
+    }
+
+    func insertPoint(_ coordinate: CLLocationCoordinate2D) {
+        handleMapTap(at: coordinate)
+        if appState == .confirmingA || appState == .confirmingB {
+            confirmTempCoordinate()
+        }
+    }
+
+    func insertCoordinateFromInput() {
+        parseCoordinateInput()
+    }
+
+    func searchResultSubtitle(for item: MKMapItem) -> String {
+        item.placemark.fullAddress ?? ""
+    }
+
+    func searchResultDistanceText(for item: MKMapItem, cameraRegion: MKCoordinateRegion?) -> String? {
+        guard let center = cameraRegion?.center else { return nil }
+        let dist = CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
+            .distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude))
+        if dist < 1000 {
+            return String(format: "%.0f m", dist)
+        } else {
+            return String(format: "%.1f km", dist / 1000.0)
+        }
+    }
+
+    func parseCoordinateInput() {
+        locationInputError = nil
+        let input = coordinateInputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return }
+        
+        // Use a more robust regex to find latitude and longitude in any text (supports Google Maps, brackets, etc.)
+        // Matches typical coordinate patterns like: 25.033, 121.565 or (25.033, 121.565)
+        let pattern = #"(?i)(-?\d{1,3}(?:\.\d+)?)\s*[,，\s]\s*(-?\d{1,3}(?:\.\d+)?)"#
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)) {
+            
+            let latStr = (input as NSString).substring(with: match.range(at: 1))
+            let lonStr = (input as NSString).substring(with: match.range(at: 2))
+            
+            if let lat = Double(latStr), let lon = Double(lonStr) {
+                let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                if CLLocationCoordinate2DIsValid(coord) {
+                    insertPoint(coord)
+                    coordinateInputText = ""
+                    return
+                }
+            }
+        }
+        
+        locationInputError = "無法辨識座標。格式參考：25.033, 121.565"
+    }
+
+    func normalizeMapRegion(_ region: MKCoordinateRegion) -> MKCoordinateRegion {
+        var r = region
+        r.span.latitudeDelta = max(0.0001, min(150, r.span.latitudeDelta))
+        r.span.longitudeDelta = max(0.0001, min(150, r.span.longitudeDelta))
+        return r
+    }
+
+    func mapRegion(fitting coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
+        guard !coordinates.isEmpty else { return mapRegion }
+        
+        var minLat = 90.0
+        var maxLat = -90.0
+        var minLon = 180.0
+        var maxLon = -180.0
+        
+        for coord in coordinates {
+            minLat = min(minLat, coord.latitude)
+            maxLat = max(maxLat, coord.latitude)
+            minLon = min(minLon, coord.longitude)
+            maxLon = max(maxLon, coord.longitude)
+        }
+        
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(latitudeDelta: (maxLat - minLat) * 1.4, longitudeDelta: (maxLon - minLon) * 1.4)
+        return MKCoordinateRegion(center: center, span: span)
+    }
+    
+    private func centerMap(on coordinate: CLLocationCoordinate2D) {
+        let latSpan = min(mapRegion.span.latitudeDelta, AppConstants.Map.defaultSpanDelta)
+        let lonSpan = min(mapRegion.span.longitudeDelta, AppConstants.Map.defaultSpanDelta)
+        mapRegion = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: latSpan, longitudeDelta: lonSpan))
+    }
+
+    // MARK: - Pure Point Logic
+    func toggleOverlay(_ id: String) { purePointStore.toggleOverlay(id) }
+    func addImportedOverlays(_ overlays: [PurePointOverlay]) { purePointStore.addImportedOverlays(overlays) }
+    func removeOverlay(_ overlay: PurePointOverlay) { purePointStore.removeOverlay(overlay) }
+
+    // MARK: - Compatibility / Lifecycle
+    
+    func handleDeviceDisconnected() {
+        if isActiveSimulationRunning {
+            shouldResumeActiveAfterReconnect = true
+            simulationStore.stopSimulation()
+        }
+    }
+    
+    func startIfReadyAndConnected() {
+        guard deviceManager.isConnected else { return }
+        if shouldResumeActiveAfterReconnect {
+            shouldResumeActiveAfterReconnect = false
+            simulationStore.startSimulation()
+        }
+    }
+    
+    func switchModePreservingPinnedLocation() { 
+        resetDraft(clearActive: false)
+    }
+    func handleScenePhaseChange(_ phase: ScenePhase) { }
+
+    func cleanup() {
+        simulationStore.cleanup()
+    }
 }
