@@ -214,9 +214,29 @@ struct LegacyMapView: NSViewRepresentable {
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if annotation is MKUserLocation { return nil }
+            
+            if let cluster = annotation as? MKClusterAnnotation {
+                let identifier = "PurePointCluster"
+                var clusterView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                if clusterView == nil {
+                    clusterView = MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: identifier)
+                } else {
+                    clusterView?.annotation = cluster
+                }
+                clusterView?.markerTintColor = .systemPurple
+                clusterView?.displayPriority = .defaultHigh
+                return clusterView
+            }
+            
             guard let flyAnn = annotation as? FlyAnnotation else { return nil }
             
-            let identifier = "FlyAnnotation"
+            let identifier: String
+            if case .purePoint = flyAnn.type {
+                identifier = "PurePoint"
+            } else {
+                identifier = "FlyAnnotation"
+            }
+            
             var view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
             if view == nil {
                 view = MKMarkerAnnotationView(annotation: flyAnn, reuseIdentifier: identifier)
@@ -230,23 +250,28 @@ struct LegacyMapView: NSViewRepresentable {
                 view?.markerTintColor = NSColor(color)
                 view?.displayPriority = .defaultLow
                 view?.glyphText = ""
+                view?.clusteringIdentifier = "purePointCluster"
 
             case .currentPosition:
                 view?.markerTintColor = NSColor(red: 0.08, green: 0.24, blue: 0.62, alpha: 1.0)
                 view?.glyphImage = NSImage(systemSymbolName: "mappin.circle.fill", accessibilityDescription: nil)
                 view?.displayPriority = .required
+                view?.clusteringIdentifier = nil
 
             case .draftPointA, .draftFixedPoint, .multiPoint:
                 view?.markerTintColor = .systemYellow
                 view?.displayPriority = .required
+                view?.clusteringIdentifier = nil
 
             case .draftPointB:
                 view?.markerTintColor = .systemOrange
                 view?.displayPriority = .required
+                view?.clusteringIdentifier = nil
 
             case .tempCoordinate:
                 view?.markerTintColor = .systemBrown
                 view?.displayPriority = .required
+                view?.clusteringIdentifier = nil
             }
             
             return view
