@@ -28,6 +28,18 @@ This lightweight utility enables developers and users on Apple Silicon (M1/M2/M3
 
 ---
 
+## 🚀 Latest Features & Performance Optimizations (v1.1+)
+
+We are constantly improving our core algorithms and user experience. The latest version includes:
+
+*   **⚡ Parallel Route Calculation**: Leverages Swift Concurrency's `TaskGroup` to significantly speed up multi-point path generation.
+*   **🌍 High-Precision Great Circle Interpolation**: Automatically employs Great Circle algorithms for segments over 500m, ensuring pinpoint accuracy for long-distance simulations.
+*   **⏲️ Adaptive Update Frequency**: Dynamically adjusts coordinate injection frequency (0.5s for high speeds / 2.0s for low speeds) to balance smoothness and CPU efficiency.
+*   **🎯 Smart Map Annotation Clustering**: Annotations automatically cluster based on zoom level, maintaining UI responsiveness even with thousands of "PurePoints" imported.
+*   **🛡️ Connection Watchdog**: Built-in monitoring detects and recovers interrupted RSD tunnels, ensuring rock-solid stability during long simulation sessions.
+
+---
+
 ## ⚙️ Technical Workflow
 
 **flyflyfly** orchestrates a seamless location injection flow from macOS to iOS:
