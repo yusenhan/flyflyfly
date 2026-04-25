@@ -31,7 +31,7 @@ struct SidebarFooterView: View {
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("flyflyfly")
+                    Text("飛不飛都得飛")
                         .font(.caption)
                         .fontWeight(.semibold)
                     Text("app created by Hanson Han")

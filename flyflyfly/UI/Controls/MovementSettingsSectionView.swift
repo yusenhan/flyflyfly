@@ -8,14 +8,14 @@ struct MovementSettingsSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Movement Settings").font(.subheadline).fontWeight(.semibold).foregroundColor(ModernTheme.label)
+            Text("移動設定").font(.subheadline).fontWeight(.semibold).foregroundColor(ModernTheme.label)
             
             if vm.operationMode != .fixedPoint {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Path Mode").font(.caption).foregroundColor(.secondary)
-                    Picker("Path Mode", selection: $vm.transportType) {
+                    Text("路徑規劃模式").font(.caption).foregroundColor(.secondary)
+                    Picker("路徑模式", selection: $vm.transportType) {
                         ForEach(TransportType.allCases) { type in
-                            Text(LocalizedStringKey(type.rawValue)).tag(type)
+                            Text(type.rawValue).tag(type)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -28,19 +28,17 @@ struct MovementSettingsSectionView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
-                    Text("Current Speed: \(String(format: "%.1f", vm.speed)) km/h")
+                    Text("當前速度: \(String(format: "%.1f", vm.speed)) km/h")
                     if !vm.routes.isEmpty || vm.totalRouteDistance > 0 {
                         HStack(spacing: 4) {
-                            Text("Estimated Time:").font(.caption).foregroundColor(.secondary)
-                            Text(vm.estimatedTime).font(.caption.monospacedDigit()).foregroundColor(.primary)
+                            Text("單趟: \(vm.estimatedTime)")
                             if let progress = vm.progressPercentage {
                                 Text("(\(progress))")
-                                    .font(.caption2.monospacedDigit())
-                                    .foregroundColor(ModernTheme.accent)
+                                    .fontWeight(.bold)
                             }
                         }
+                        .foregroundColor(ModernTheme.info)
                     }
-
                 }
                 .font(.callout)
                 Slider(
@@ -49,12 +47,12 @@ struct MovementSettingsSectionView: View {
                     step: AppConstants.Simulation.speedStep
                 )
                 HStack(spacing: 8) {
-                    TextField("Speed", text: $speedText)
+                    TextField("速度", text: $speedText)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 88)
 
                     Stepper(
-                        "Fine-tune",
+                        "微調 0.1",
                         value: $vm.speed,
                         in: AppConstants.Simulation.speedStep...vm.maximumSpeed,
                         step: AppConstants.Simulation.speedStep
@@ -63,7 +61,7 @@ struct MovementSettingsSectionView: View {
                 }
             }
 
-            Toggle("Patrol Mode", isOn: $vm.isEndlessLoop)
+            Toggle("來回巡邏", isOn: $vm.isEndlessLoop)
                 .tint(ModernTheme.accent)
                 .disabled(vm.operationMode == .multiPoint && vm.isClosedLoop)
 
@@ -89,11 +87,11 @@ struct MovementSettingsSectionView: View {
 
     private var multiPointWaypointControls: some View {
         HStack {
-            Text("Waypoints: \(vm.waypoints.count)")
+            Text("多點數量：\(vm.waypoints.count)")
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
-            Button("Remove Last") {
+            Button("移除最後點") {
                 if !vm.waypoints.isEmpty { vm.waypoints.removeLast() }
             }
             .buttonStyle(.bordered)

@@ -36,3 +36,6 @@ dist/
 *.swp
 *.lock
 \n# Worktrees\n.worktrees/
+
+# Worktrees
+.worktrees/

@@ -376,6 +376,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = CA9AF8712F5539E400AC05E8 /* Build configuration list for PBXNativeTarget "flyflyfly" */;
 			buildPhases = (
+				F0B100022F70000100BUILD /* Build Bundled Tools */,
 				CA9AF8492F5539E300AC05E8 /* Sources */,
 				CA9AF84A2F5539E300AC05E8 /* Frameworks */,
 				F0B100012F70000100BUNDLE /* Copy Bundled Tools */,
@@ -527,6 +528,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -e\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\ncp -R \"$SRCROOT/bundled/pymobiledevice3\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3/pymobiledevice3\"\ncp \"$SRCROOT/bundled/dvt-location-stream\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dvt-location-stream\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dvt-location-stream\"\n";
+		};
+		F0B100022F70000100BUILD /* Build Bundled Tools */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Bundled Tools";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\ncd \"$SRCROOT\"\nif [ ! -d \"bundled\" ]; then\n    mkdir bundled\nfi\n\nif [ ! -e \"bundled/pymobiledevice3\" ]; then\n    bash scripts/build-bundled-pymobiledevice3.sh\nfi\n\nif [ ! -e \"bundled/dvt-location-stream\" ]; then\n    bash scripts/build-dvt-stream.sh\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

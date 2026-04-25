@@ -13,9 +13,9 @@ public struct SearchBar: View {
 
     public var body: some View {
         HStack(spacing: 6) {
-            TextField("Search Location...", text: $placeKeyword)
+            TextField("搜尋地點（例如 Taipei 101）", text: $placeKeyword)
                 .textFieldStyle(.roundedBorder)
-            Button("Search") { onSearch() }
+            Button("搜尋") { onSearch() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         }

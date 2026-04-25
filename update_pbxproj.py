@@ -120,6 +120,41 @@ def main():
     else:
         print("Could not find Sources build phase for flyflyfly target")
 
+    # Add Build Bundled Tools phase
+    build_phase_id = "F0B100022F70000100BUILD"
+    if build_phase_id not in content:
+        print("Adding Build Bundled Tools phase")
+        build_phase_content = """		F0B100022F70000100BUILD /* Build Bundled Tools */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Bundled Tools";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\\ncd \\\"$SRCROOT\\\"\\nif [ ! -d \\\"bundled\\\" ]; then\\n    mkdir bundled\\nfi\\n\\nif [ ! -e \\\"bundled/pymobiledevice3\\\" ]; then\\n    bash scripts/build-bundled-pymobiledevice3.sh\\nfi\\n\\nif [ ! -e \\\"bundled/dvt-location-stream\\\" ]; then\\n    bash scripts/build-dvt-stream.sh\\nfi\\n";
+		};
+"""
+        insertion_point = content.find('/* End PBXShellScriptBuildPhase section */')
+        content = content[:insertion_point] + build_phase_content + content[insertion_point:]
+
+        # Add to flyflyfly target build phases
+        target_search = r'(CA9AF84C2F5539E300AC05E8 /\* flyflyfly \*/ = \{.*?buildPhases = \(\n)'
+        match = re.search(target_search, content, re.DOTALL)
+        if match:
+            insertion_point = match.end()
+            content = content[:insertion_point] + f'\t\t\t\t{build_phase_id} /* Build Bundled Tools */,\n' + content[insertion_point:]
+        else:
+            print("Could not find flyflyfly target to add build phase")
+
     with open(pbxproj_path, 'w') as f:
         f.write(content)
     print("Successfully updated project.pbxproj")

@@ -15,7 +15,7 @@ struct RouteControlPanel: View {
             if vm.appState == .readyToMove || vm.appState == .routeSelection || vm.appState == .moving {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Estimated Time")
+                        Text("預估所需時間")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         Text(vm.estimatedTime)
@@ -25,7 +25,7 @@ struct RouteControlPanel: View {
                     Spacer()
                     if let progress = vm.progressPercentage {
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text("Current Progress")
+                            Text("目前進度")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             Text(progress)
@@ -45,7 +45,7 @@ struct RouteControlPanel: View {
                     .padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent)
-            .tint(vm.isMainActionDestructive ? Color.red : ModernTheme.accent)
+            .tint(vm.isMainActionDestructive ? Color.red : Color(red: 0.85, green: 0.55, blue: 0.35))
             .controlSize(.regular)
             .disabled(vm.isMainActionDisabled)
         }

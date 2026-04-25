@@ -31,33 +31,16 @@ struct FavoritesSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button(action: { isExpanded.toggle() }) {
-                    HStack {
-                        Text("Favorites").font(.subheadline).fontWeight(.semibold)
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(ModernTheme.label)
+            Button(action: { isExpanded.toggle() }) {
+                HStack {
+                    Text("我的最愛").font(.subheadline).fontWeight(.semibold)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
                 }
-                .buttonStyle(.plain)
-                
-                Spacer()
-                
-                if !vm.favoriteStore.items.isEmpty {
-                    Button(action: {
-                        if let url = vm.favoriteStore.exportAll() {
-                            NSWorkspace.shared.activateFileViewerSelecting([url])
-                        }
-                    }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("導出為 JSON")
-                }
+                .foregroundColor(ModernTheme.label)
             }
+            .buttonStyle(.plain)
 
             if isExpanded {
                 if vm.favoriteStore.items.isEmpty {
@@ -191,13 +174,13 @@ struct FavoritesSectionView: View {
 
                 HStack(spacing: 8) {
                     if let current = vm.tempCoordinate ?? vm.currentPosition ?? (vm.operationMode == .fixedPoint ? vm.pointA : nil) {
-                        saveButton(title: "Save Point", icon: "mappin.and.ellipse", type: .point, coords: [current])
+                        saveButton(title: "存定點", icon: "mappin.and.ellipse", type: .point, coords: [current])
                     }
                     
                     if vm.operationMode == .routeAB, let a = vm.pointA, let b = vm.pointB {
-                        saveButton(title: "Save A-B", icon: "arrow.left.and.right", type: .route, coords: [a, b])
+                        saveButton(title: "存 A-B", icon: "arrow.left.and.right", type: .route, coords: [a, b])
                     } else if vm.operationMode == .multiPoint && vm.waypoints.count >= 2 {
-                        saveButton(title: "Save Multi-Point", icon: "polyline", type: .route, coords: vm.waypoints)
+                        saveButton(title: "存多點", icon: "polyline", type: .route, coords: vm.waypoints)
                     }
                 }
             }

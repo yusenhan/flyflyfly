@@ -49,20 +49,9 @@ struct FavoriteItem: Codable, Identifiable, Equatable {
 @MainActor
 final class FavoriteStore: ObservableObject {
     @Published var items: [FavoriteItem] = []
-    
-    // Legacy storage keys for migration
     private let storageKey = "flyflyfly.favorites.v3"
     private let v2Key = "flyflyfly.favorites.v2"
     private let legacyKey = "flyflyfly.favorites"
-    
-    // New File System storage
-    private var saveDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".flyflyfly", isDirectory: true)
-    }
-    
-    private var saveFile: URL {
-        saveDirectory.appendingPathComponent("flyflyfly.plist")
-    }
     
     init() {
         load()
@@ -78,6 +67,7 @@ final class FavoriteStore: ObservableObject {
     func geocode(_ item: FavoriteItem) {
         guard let coord = item.coordinates.first?.clCoordinate else { return }
         
+        // OSM Nominatim API (OpenStreetMap)
         let urlString = "https://nominatim.openstreetmap.org/reverse?format=json&lat=\(coord.latitude)&lon=\(coord.longitude)&zoom=10&addressdetails=1&accept-language=zh-TW"
         
         guard let url = URL(string: urlString) else { return }
@@ -125,82 +115,31 @@ final class FavoriteStore: ObservableObject {
         }
     }
     
-    /// 導出所有我的最愛為 JSON 檔案
-    /// - Returns: 導出檔案的路徑 URL
-    func exportAll() -> URL? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMddHHmmss"
-        let timestamp = formatter.string(from: Date())
-        let fileName = "flyflyfly-\(timestamp).json"
-        
-        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-        let targetURL = downloadsDir.appendingPathComponent(fileName)
-        
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(items)
-            try data.write(to: targetURL, options: .atomic)
-            print("[INFO] Favorites exported to \(targetURL.path)")
-            return targetURL
-        } catch {
-            print("[ERROR] Failed to export favorites: \(error)")
-            return nil
-        }
-    }
-    
     private func save() {
-        do {
-            if !FileManager.default.fileExists(atPath: saveDirectory.path) {
-                try FileManager.default.createDirectory(at: saveDirectory, withIntermediateDirectories: true)
-            }
-            
-            let encoder = PropertyListEncoder()
-            encoder.outputFormat = .xml // Human readable plist
-            let data = try encoder.encode(items)
-            try data.write(to: saveFile, options: .atomic)
-            print("[INFO] Favorites saved to \(saveFile.path)")
-        } catch {
-            print("[ERROR] Failed to save favorites: \(error)")
+        if let encoded = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(encoded, forKey: storageKey)
         }
     }
     
     private func load() {
-        // 1. Try loading from new File System location
-        if FileManager.default.fileExists(atPath: saveFile.path) {
-            do {
-                let data = try Data(contentsOf: saveFile)
-                let decoder = PropertyListDecoder()
-                items = try decoder.decode([FavoriteItem].self, from: data).sorted(by: { $0.createdAt > $1.createdAt })
-                print("[INFO] Favorites loaded from File System")
-                return
-            } catch {
-                print("[ERROR] Failed to load from File System: \(error)")
-            }
-        }
-        
-        // 2. Migration: Try loading v3 from UserDefaults
+        // Try loading v3
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([FavoriteItem].self, from: data) {
             items = decoded.sorted(by: { $0.createdAt > $1.createdAt })
-            save()
-            UserDefaults.standard.removeObject(forKey: storageKey)
-            print("[INFO] Migrated favorites from UserDefaults v3 to File System")
             return
         }
         
-        // 3. Migration: Migrate from v2
+        // Migrate from v2 (Keep geocode here to populate initial data for migration)
         if let data = UserDefaults.standard.data(forKey: v2Key),
            let decoded = try? JSONDecoder().decode([FavoriteItem].self, from: data) {
             items = decoded.sorted(by: { $0.createdAt > $1.createdAt })
             save()
             for item in items { geocode(item) }
             UserDefaults.standard.removeObject(forKey: v2Key)
-            print("[INFO] Migrated favorites from UserDefaults v2 to File System")
             return
         }
         
-        // 4. Migration: Migrate from v1
+        // Migrate from v1
         if let legacyData = UserDefaults.standard.data(forKey: legacyKey),
            let decodedLegacy = try? JSONDecoder().decode([LegacyFavoriteLocation].self, from: legacyData) {
             items = decodedLegacy.map { legacy in
@@ -214,7 +153,6 @@ final class FavoriteStore: ObservableObject {
             save()
             for item in items { geocode(item) }
             UserDefaults.standard.removeObject(forKey: legacyKey)
-            print("[INFO] Migrated favorites from UserDefaults legacy to File System")
         }
     }
 }

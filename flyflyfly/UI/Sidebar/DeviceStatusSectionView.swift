@@ -10,7 +10,7 @@ struct DeviceStatusSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Label Header
-            Text("Device Connection").font(.caption.bold()).foregroundColor(.secondary)
+            Text("裝置連線").font(.caption.bold()).foregroundColor(.secondary)
 
             // Device Name Display
             HStack(spacing: 12) {
@@ -32,7 +32,7 @@ struct DeviceStatusSectionView: View {
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
 
             // Transport Switcher
-            Picker("Connection Mode", selection: $isWirelessMode) {
+            Picker("連線模式", selection: $isWirelessMode) {
                 Text("USB").tag(false)
                 Text("Wi‑Fi").tag(true)
             }
@@ -50,8 +50,8 @@ struct DeviceStatusSectionView: View {
                     .cornerRadius(6)
             } else if !vm.deviceManager.isConnected {
                 Text(isWirelessMode
-                     ? "Wi-Fi Mode Hint"
-                     : "USB Mode Hint")
+                     ? "確保 iPhone 與 Mac 在同一個 Wi‑Fi 網路，按下上方工具列的連線按鈕。"
+                     : "插上手機並解鎖，按下上方工具列的連線按鈕即可。")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -60,7 +60,7 @@ struct DeviceStatusSectionView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: { withAnimation { isShowingLogs.toggle() } }) {
                         HStack {
-                            Label(isShowingLogs ? "Hide Logs" : "Show Logs", 
+                            Label(isShowingLogs ? "隱藏連線日誌" : "顯示連線日誌", 
                                   systemImage: isShowingLogs ? "chevron.up.circle" : "chevron.down.circle")
                             Spacer()
                         }
