@@ -24,6 +24,7 @@ final class SimulationStore: ObservableObject {
     
     private var moveTimer: Timer?
     private var pinnedKeepAliveTimer: Timer?
+    private var currentTimerInterval: TimeInterval = AppConstants.Simulation.timerInterval
     private let deviceManager: any DeviceControlling
     
     @Published var lastSentPosition: CLLocationCoordinate2D?
@@ -69,13 +70,28 @@ final class SimulationStore: ObservableObject {
         pinnedKeepAliveTimer = nil
     }
     
+    private func restartTimerIfNeeded() {
+        let newInterval = AppConstants.Simulation.interval(for: speed)
+        if abs(newInterval - currentTimerInterval) > 0.01 {
+            moveTimer?.invalidate()
+            currentTimerInterval = newInterval
+            moveTimer = Timer.scheduledTimer(withTimeInterval: currentTimerInterval, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    await self.tickSimulation()
+                }
+            }
+        }
+    }
+    
     func startSimulation() {
         stopSimulation()
         stopPinnedLocationKeepAlive() // Ensure keep-alive is OFF for route simulation
         isActiveSimulationRunning = true
         traveledDistance = 0
         
-        moveTimer = Timer.scheduledTimer(withTimeInterval: AppConstants.Simulation.timerInterval, repeats: true) { [weak self] _ in
+        currentTimerInterval = AppConstants.Simulation.interval(for: speed)
+        moveTimer = Timer.scheduledTimer(withTimeInterval: currentTimerInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 await self.tickSimulation()
@@ -87,7 +103,8 @@ final class SimulationStore: ObservableObject {
         stopPinnedLocationKeepAlive()
         isActiveSimulationRunning = true
         
-        moveTimer = Timer.scheduledTimer(withTimeInterval: AppConstants.Simulation.timerInterval, repeats: true) { [weak self] _ in
+        currentTimerInterval = AppConstants.Simulation.interval(for: speed)
+        moveTimer = Timer.scheduledTimer(withTimeInterval: currentTimerInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 await self.tickSimulation()
@@ -98,7 +115,7 @@ final class SimulationStore: ObservableObject {
     private func tickSimulation() async {
         guard isActiveSimulationRunning else { return }
         
-        let stepScale = 3600.0 / AppConstants.Simulation.timerInterval
+        let stepScale = 3600.0 / currentTimerInterval
         let distanceStep = speed * (1000.0 / stepScale)
         traveledDistance += distanceStep
         
@@ -130,6 +147,8 @@ final class SimulationStore: ObservableObject {
         
         if !activeIsEndlessLoop && traveledDistance >= totalRouteDistance {
             stopSimulation()
+        } else {
+            restartTimerIfNeeded()
         }
     }
     

@@ -18,6 +18,12 @@ enum AppConstants {
         static let maximumSpeed: Double = 300.0
         static let speedStep: Double = 0.1
         static let speedPresets: [Double] = [8.0, 18.0, 30.0, 46.0, 60.0, 150.0, 300.0]
+
+        static func interval(for speedKmh: Double) -> TimeInterval {
+            if speedKmh > 100.0 { return 0.5 }
+            if speedKmh < 5.0 { return 2.0 }
+            return 1.0
+        }
     }
     enum Map {
         static let defaultLatitude: Double = 25.0330
