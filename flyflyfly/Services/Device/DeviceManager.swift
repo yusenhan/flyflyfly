@@ -224,6 +224,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     private var tunnelProcess: Process?
     private var tunnelOutPipe: Pipe?
     private var tunnelErrPipe: Pipe?
+    private var watchdogTimer: Timer?
     private var rsdEndpoint: Endpoint?
     private var isLegacyMode = false
     private var connectedUDID: String?
@@ -265,12 +266,44 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     deinit {
         let p = tunnelProcess
         let item = autoReconnectWorkItem
+        let stream = dvtStream
         Task { @MainActor in
             item?.cancel()
+            stream.stop()
             if let p = p, p.isRunning {
                 p.terminate()
             }
         }
+    }
+
+    func terminateAllProcesses() {
+        appendLog("執行所有程序清理")
+        
+        expectedDvtStreamExit = true
+        dvtStream.stop()
+        
+        if let p = tunnelProcess {
+            if p.isRunning {
+                p.terminate()
+            }
+            tunnelProcess = nil
+        }
+        tunnelOutPipe = nil
+        tunnelErrPipe = nil
+        
+        stopPrivilegedTunnelProcessIfNeeded()
+        
+        rsdEndpoint = nil
+        simulateLocationMode = nil
+        activeTunnelConnectionType = nil
+        pendingCoordinate = nil
+        inFlight = false
+    }
+
+    func cleanup() {
+        cancelAutoReconnect()
+        stopWatchdog()
+        terminateAllProcesses()
     }
 
     func connectDevice() {
@@ -353,6 +386,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 
                 self.setConnectionState(.connected, deviceName: await self.connectedDeviceLabel(using: cmd), lastError: nil)
                 self.appendLog("Legacy 連線完成（無需 Tunnel/RSD）")
+                self.startWatchdog()
             } else {
                 self.isLegacyMode = false
                 if let manual = self.manualEndpointIfValid() {
@@ -400,6 +434,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
                 self.setConnectionState(.connected, deviceName: "\(deviceLabel) (RSD: \(ep.host):\(ep.port))", lastError: nil)
                 self.appendLog("連線完成，模式：\(self.simulateLocationMode?.rawValue ?? "unknown")")
+                self.startWatchdog()
             }
             
             self.cancelAutoReconnect()
@@ -745,10 +780,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
     func disconnect() {
         userInitiatedDisconnect = true
-        cancelAutoReconnect()
         Task {
             try? await clearSimulatedLocationAsyncInternal()
-            stopTunnel()
+            cleanup()
             setConnectionState(.disconnected, deviceName: "未連接", lastError: nil)
             appendLog("裝置已中斷")
         }
@@ -1040,20 +1074,46 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }
 
     private func stopTunnel() {
-        rsdEndpoint = nil
-        simulateLocationMode = nil
-        activeTunnelConnectionType = nil
-        stopSendPipelineSynchronously()
+        terminateAllProcesses()
+    }
 
-        if let p = tunnelProcess, p.isRunning {
-            p.terminate()
+    private func startWatchdog() {
+        stopWatchdog()
+        // Check health every 5 seconds
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+                self?.checkConnectionHealth()
+            }
         }
+    }
 
-        tunnelProcess = nil
-        tunnelOutPipe = nil
-        tunnelErrPipe = nil
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = nil
+    }
 
-        stopPrivilegedTunnelProcessIfNeeded()
+    private func checkConnectionHealth() {
+        guard isConnected, !userInitiatedDisconnect else {
+            stopWatchdog()
+            return
+        }
+        
+        if isLegacyMode {
+            // Legacy mode doesn't have a persistent tunnel process to monitor
+            return
+        }
+        
+        // Monitor tunnel process
+        if let p = tunnelProcess, !p.isRunning {
+            handleUnexpectedConnectionLoss(reason: "Tunnel 服務已中斷")
+            return
+        }
+        
+        // Monitor DVT location stream if active
+        if simulateLocationMode == .dvt && !dvtStream.isRunning {
+            handleUnexpectedConnectionLoss(reason: "定位串流服務已中斷")
+            return
+        }
     }
 
     private func handleUnexpectedConnectionLoss(reason: String) {
