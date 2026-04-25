@@ -114,7 +114,7 @@ struct ContentView: View {
         .onChange(of: vm.operationMode) { _ in
             handleOperationModeChange()
         }
-        .onChange(of: vm.placeKeyword) { newValue in
+        .onChange(of: vm.searchViewModel.placeKeyword) { newValue in
             handlePlaceKeywordChange(newValue)
         }
         .onChange(of: vm.speed) { newValue in

@@ -33,7 +33,7 @@ extension ContentView {
 
     @ViewBuilder
     var locationInputSection: some View {
-        LocationInputSectionView(vm: vm, currentRegion: vm.visibleMapRegion)
+        LocationInputSectionView(vm: vm, searchViewModel: vm.searchViewModel, currentRegion: vm.visibleMapRegion)
     }
 
     var wirelessModeBinding: Binding<Bool> {
@@ -60,9 +60,9 @@ extension ContentView {
     }
 
     var operationModePicker: some View {
-        Picker("Mode", selection: $vm.operationMode) {
+        Picker("模式", selection: $vm.operationMode) {
             ForEach(OperationMode.allCases) { mode in
-                Text(LocalizedStringKey(mode.rawValue)).tag(mode)
+                Text(mode.rawValue).tag(mode)
             }
         }
         .pickerStyle(.segmented)
@@ -208,18 +208,18 @@ extension ContentView {
                         
                     case 1: // 資料 Tab
                         VStack(alignment: .leading, spacing: 20) {
-                            Text("Favorites").font(.subheadline.bold())
+                            Text("常用收藏").font(.subheadline.bold())
                             FavoritesSectionView(vm: vm)
                         }
 
                     case 2: // 設定 Tab
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("Movement Settings").font(.subheadline.bold())
+                            Text("移動參數").font(.subheadline.bold())
                             movementSettingsSection
                             
                             Divider()
                             
-                            Text("Device Connection").font(.subheadline.bold())
+                            Text("連線與診斷").font(.subheadline.bold())
                             // ... existing diagnostic/info could go here
                         }
                         
@@ -303,21 +303,21 @@ extension ContentView {
 
     var routeReplacementSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Start New Route")
+            Text("開始新路線")
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            Text("New Route Alert Message")
+            Text("將以新路線取代目前藍線路線，但不會中斷裝置連線。")
                 .foregroundColor(.secondary)
 
             HStack(spacing: 10) {
                 Spacer()
-                Button("Cancel") {
+                Button("取消") {
                     vm.cancelRouteReplacement()
                 }
                 .buttonStyle(.bordered)
 
-                Button("Confirm Start") {
+                Button("確認開始") {
                     vm.confirmRouteReplacement()
                 }
                 .buttonStyle(.borderedProminent)
