@@ -14,21 +14,6 @@ struct FavoritesSectionView: View {
     @State private var expandedCountries: Set<String> = []
     @State private var expandedCities: Set<String> = []
 
-    private var hierarchicalGroups: [FavoriteType: [String: [String: [FavoriteItem]]]] {
-        var groups: [FavoriteType: [String: [String: [FavoriteItem]]]] = [:]
-        for item in vm.favoriteStore.items {
-            let mode = item.type
-            let country = item.country ?? "未知國家"
-            let city = item.city ?? "未知地區"
-            
-            if groups[mode] == nil { groups[mode] = [:] }
-            if groups[mode]![country] == nil { groups[mode]![country] = [:] }
-            
-            groups[mode]![country]![city, default: []].append(item)
-        }
-        return groups
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: { isExpanded.toggle() }) {
@@ -51,7 +36,7 @@ struct FavoritesSectionView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
-                            let modeGroups = hierarchicalGroups
+                            let modeGroups = vm.favoriteStore.groups
                             let sortedModes = modeGroups.keys.sorted { $0.rawValue < $1.rawValue }
                             
                             ForEach(sortedModes, id: \.self) { mode in

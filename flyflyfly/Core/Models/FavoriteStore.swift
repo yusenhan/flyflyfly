@@ -48,13 +48,36 @@ struct FavoriteItem: Codable, Identifiable, Equatable {
 
 @MainActor
 final class FavoriteStore: ObservableObject {
-    @Published var items: [FavoriteItem] = []
+    @Published var items: [FavoriteItem] = [] {
+        didSet {
+            updateGroups()
+        }
+    }
+    
+    @Published private(set) var groups: [FavoriteType: [String: [String: [FavoriteItem]]]] = [:]
+    
     private let storageKey = "flyflyfly.favorites.v3"
     private let v2Key = "flyflyfly.favorites.v2"
     private let legacyKey = "flyflyfly.favorites"
     
     init() {
         load()
+        updateGroups()
+    }
+    
+    private func updateGroups() {
+        var newGroups: [FavoriteType: [String: [String: [FavoriteItem]]]] = [:]
+        for item in items {
+            let mode = item.type
+            let country = item.country ?? "未知國家"
+            let city = item.city ?? "未知地區"
+            
+            if newGroups[mode] == nil { newGroups[mode] = [:] }
+            if newGroups[mode]![country] == nil { newGroups[mode]![country] = [:] }
+            
+            newGroups[mode]![country]![city, default: []].append(item)
+        }
+        self.groups = newGroups
     }
     
     func add(name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType? = nil) {
@@ -83,7 +106,7 @@ final class FavoriteStore: ObservableObject {
                 let country = response.address.country
                 let city = response.address.city ?? response.address.town ?? response.address.village ?? response.address.suburb ?? response.address.state
                 
-                await updateItemLocation(id: item.id, country: country, city: city)
+                updateItemLocation(id: item.id, country: country, city: city)
             } catch {
                 print("[ERROR] OSM Geocoding failed: \(error)")
             }

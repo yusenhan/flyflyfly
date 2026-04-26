@@ -191,46 +191,54 @@ extension ContentView {
             
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch sidebarTab {
-                    case 0: // 模擬 Tab
-                        VStack(alignment: .leading, spacing: 16) {
-                            operationModePicker
-                            deviceStatusSection(isCompactSidebar: isCompactSidebar)
-                            locationInputSection
-                            
-                            if vm.isActiveSimulationRunning || vm.appState == .moving {
-                                StatusViewSection(vm: vm, routeColors: routeColors)
-                                    .transition(.move(edge: .top).combined(with: .opacity))
-                            }
-                        }
+            ZStack(alignment: .topLeading) {
+                // Tab 0: 模擬
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        operationModePicker
+                        deviceStatusSection(isCompactSidebar: isCompactSidebar)
+                        locationInputSection
                         
-                    case 1: // 資料 Tab
-                        VStack(alignment: .leading, spacing: 20) {
-                            Text("常用收藏").font(.subheadline.bold())
-                            FavoritesSectionView(vm: vm)
+                        if vm.isActiveSimulationRunning || vm.appState == .moving {
+                            StatusViewSection(vm: vm, routeColors: routeColors)
+                                .transition(.move(edge: .top).combined(with: .opacity))
                         }
-
-                    case 2: // 設定 Tab
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("移動參數").font(.subheadline.bold())
-                            movementSettingsSection
-                            
-                            Divider()
-                            
-                            Text("連線與診斷").font(.subheadline.bold())
-                            // ... existing diagnostic/info could go here
-                        }
-                        
-                    default:
-                        EmptyView()
                     }
+                    .padding(.horizontal, isCompactSidebar ? 10 : 16)
+                    .padding(.vertical, 16)
                 }
-                .padding(.horizontal, isCompactSidebar ? 10 : 16)
-                .padding(.vertical, 16)
+                .opacity(sidebarTab == 0 ? 1 : 0)
+                .disabled(sidebarTab != 0)
+
+                // Tab 1: 資料
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("常用收藏").font(.subheadline.bold())
+                        FavoritesSectionView(vm: vm)
+                    }
+                    .padding(.horizontal, isCompactSidebar ? 10 : 16)
+                    .padding(.vertical, 16)
+                }
+                .opacity(sidebarTab == 1 ? 1 : 0)
+                .disabled(sidebarTab != 1)
+
+                // Tab 2: 設定
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("移動參數").font(.subheadline.bold())
+                        movementSettingsSection
+                        
+                        Divider()
+                        
+                        Text("連線與診斷").font(.subheadline.bold())
+                    }
+                    .padding(.horizontal, isCompactSidebar ? 10 : 16)
+                    .padding(.vertical, 16)
+                }
+                .opacity(sidebarTab == 2 ? 1 : 0)
+                .disabled(sidebarTab != 2)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // 3. Fixed Footer for Critical Controls
             VStack(spacing: 12) {
