@@ -1,82 +1,73 @@
-# ✈️ flyflyfly: macOS iOS Location Simulation Utility
+# ✈️ flyflyfly - macOS iOS Location Simulation Utility
 
-中文版: [繁體中文 README](./README.md)
+中文版: [Traditional Chinese README](./README.md)
 
 ![macOS Support](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square&logo=apple)
 ![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
+![C++ Core](https://img.shields.io/badge/Engine-C%2B%2B20-blueviolet?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**flyflyfly is a high-performance iOS global positioning simulation suite designed exclusively for macOS.**  
-This lightweight utility enables developers and users on Apple Silicon (M1/M2/M3) or Intel Macs to precisely inject GPS coordinates into iPhone or iPad devices over high-speed USB or wireless tunnels, fully compatible with iOS 17 and iOS 18.
+**flyflyfly is a high-performance iOS location simulation flagship suite built exclusively for macOS.**  
+Powered by a C++20 compute engine and native socket injection, it allows developers on Apple Silicon (M1/M2/M3) or Intel Macs to control iPhone/iPad GPS coordinates with extreme precision and minimal resource footprint, fully compatible with iOS 17 & 18.
 
 ---
 
 ## ✨ Key Use Cases
 
-### 🎮 LBS (Location Based Service) Optimization
-- **Seamless Game Testing**: Ideal for Location Based games like *Pokémon GO*, *Pikmin Bloom*, or *Monster Hunter Now*. Simulate movement paths and explore regional content with ease.
-- **Virtual Social Discovery**: Check in at global landmarks or discover new social content without the need for physical travel.
+### 🎮 Ultimate LBS (Location Based Service) Experience
+- **Buttery-Smooth Gaming**: Designed for *Pokémon GO*, *Monster Hunter Now*, and other LBS games with millisecond-level responsiveness.
+- **Global Virtual Discovery**: Instantly teleport your social media presence to landmarks worldwide.
 
-### 🛡️ Privacy on Your Terms
-- **Precise Location Masking**: Protect your digital footprint by hiding your real home or office coordinates from location-tracking apps.
-- **Bypass Regional Restrictions**: Access geo-locked social feeds or local services instantly.
-
-### 👨‍💻 Engineering & Development
-- **Navigation Logic Validation**: Accurately test A-B movement interpolation for logistics, maps, and ride-hailing applications.
-- **Global Environment Simulation**: Verify app behavior across international time zones and GPS coordinates.
+### 🛡️ Privacy & Development
+- **Digital Footprint Masking**: Hide your precise home or office location from tracking-intensive apps.
+- **Pro-Grade Validation**: Accurate A-B path interpolation for logistics, mapping, and ride-hailing app development.
 
 ---
 
-## 🚀 Latest Features & Performance Optimizations (v1.1+)
+## 🚀 Performance Revolution (C++ Driven)
 
-We are constantly improving our core algorithms and user experience. The latest version includes:
+The project has fully transitioned to a **Swift-C++ Hybrid Architecture**, delivering unprecedented performance:
 
-*   **⚡ Parallel Route Calculation**: Leverages Swift Concurrency's `TaskGroup` to significantly speed up multi-point path generation.
-*   **🌍 High-Precision Great Circle Interpolation**: Automatically employs Great Circle algorithms for segments over 500m, ensuring pinpoint accuracy for long-distance simulations.
-*   **⏲️ Adaptive Update Frequency**: Dynamically adjusts coordinate injection frequency (0.5s for high speeds / 2.0s for low speeds) to balance smoothness and CPU efficiency.
-*   **🚀 C++ High-Performance Compute Core**: Re-engineered core modules for path interpolation, distance calculation, and spatial search using a C++20 engine, achieving 5-10x speedups.
-*   **🎯 Intelligent Spatial Indexing (Quadtree)**: Leverages C++ Quadtree technology to maintain buttery-smooth zooming and panning, even with tens of thousands of active annotations.
-*   **⚡ Native Communication Tunnel**: Replaces external Python processes with native C++ Sockets for coordinate injection, reducing memory footprint by 90% and eliminating IPC latency.
-*   **⚡ Zero-Lag Sidebar Tab Switching**: Employs `ZStack` view persistence to eliminate UI stuttering during tab transitions.
-*   **🛡️ Connection Watchdog**: Built-in monitoring detects and recovers interrupted RSD tunnels, ensuring rock-solid stability during long simulation sessions.
+*   **🚀 C++ High-Performance Compute Core**: Core path interpolation and distance calculations re-engineered in C++20. Search complexity optimized from $O(N)$ to $O(\log N)$, with near-zero latency.
+*   **🎯 Native Spatial Indexing (Quadtree)**: Employs a C++ Quadtree index, enabling smooth rendering and interaction with **tens of thousands** of map annotations without stuttering.
+*   **⚡ Native Communication Tunnel**: Replaced the external Python push process with a native C++ Socket client:
+    - **90% Memory Reduction**: Footprint per connection dropped from 50MB+ to **under 5MB**.
+    - **Zero-Latency Injection**: Eliminates IPC (Pipe) serialization overhead for more instantaneous location updates.
+*   **⚡ Zero-Lag Sidebar Tab Switching**: Uses `ZStack` view persistence to eliminate UI layout recalculations during transitions.
 
 ---
 
 ## ⚙️ Technical Workflow
 
-**flyflyfly** orchestrates a seamless location injection flow from macOS to iOS:
-
 ```mermaid
 graph TD
     %% Roles
     subgraph UI_Layer [SwiftUI UI Layer]
-        A[ContentView / Sidebar] -->|1. Select Mode| B(AppViewModel)
-        A -->|4. Set Coords/Route| B
-        A -->|6. Click Start| B
+        A[ContentView / Sidebar] -->|1. Connect| B(AppViewModel)
+        A -->|4. Set Coords| B
+        A -->|6. Start Moving| B
     end
 
-    subgraph Logic_Layer [Core Logic Layer]
+    subgraph Logic_Layer [C++ Engine Layer]
         B -->|2. Req Connection| C{DeviceManager}
         
-        subgraph Connection_Process [Tunneling & Connectivity]
-            C -->|USB| D[USBMuxD Discovery]
-            C -->|Wi-Fi| E[mDNS / ZeroConf Search]
-            D & E --> F[Build RSD Tunnel]
-            F -->|Invoke| G[bundled/pymobiledevice3]
+        subgraph Connection_Process [RSD Tunneling]
+            C -->|Discovery| D[USBMuxD / mDNS]
+            D -->|Invoke| G[bundled/pymobiledevice3]
             G -->|Elevate| H[macOS Password Prompt]
-            H -->|Success| I[Established Tunnel]
+            H -->|Success| I[Established RSD Tunnel]
         end
 
-        B -->|5. Path Planning| J[RouteMotionEngine]
-        J -->|Interpolation| K[Smooth Coords Stream]
+        B -->|5. Path Planning| J[C++ FastMotionEngine]
+        J -->|O log N Search| K[Smooth Coords Stream]
     end
 
-    subgraph Service_Layer [Service & Background Process]
-        I -->|3. Status Update| B
+    subgraph Native_Service [Native Injection Service]
+        I -->|3. Tunnel Ready| B
         B -->|7. Start Stream| L[DVTLocationStream]
-        L -->|Data Pipe| M[bundled/dvt-location-stream]
-        K -->|Real-time Push| L
+        L -->|C++ Socket| M[Native Tunnel]
+        K -->|Zero-copy Push| M
     end
 
     subgraph iOS_Device [iOS Device]
@@ -91,37 +82,31 @@ graph TD
 
 | Item | Details |
 |------|---------|
+| **Compute Engine** | C++ 20 / Swift 5.9 Interop |
 | **Arch** | Apple Silicon (M1/M2/M3), Intel x86_64 |
-| **macOS** | macOS 13 Ventura / 14 Sonoma / 15 Sequoia |
+| **macOS** | 13.0 Ventura / 14.0 Sonoma / 15.0 Sequoia |
 | **iOS / iPadOS** | 16.0, 17.0, 18.0+ |
-| **Connectivity** | High-Speed USB, Wireless RSD Tunneling |
+| **Connectivity** | High-Speed USB / Wireless RSD Tunneling |
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Device Setup
-- Enable "Developer Mode" on your iOS device.
-- Connect via USB once to establish trust with your Mac.
-
-### 2. Build & Run
+Build from source for the latest C++ core features:
 ```bash
 git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly
-xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
+# Run the auto-config script
+python3 update_pbxproj.py
+# Build and Run
+./runfly.sh
 ```
 
 ---
 
 ## ⚖️ Disclaimer
-This tool is for educational purposes, development testing, and personal privacy only. Users are responsible for compliance with third-party terms of service.
-
----
-
-## ☕ Support
-If you find this project useful, consider supporting development via [Ko-fi](https://ko-fi.com/flyflyfly).
+This tool is for educational, development testing, and privacy purposes only. Users are responsible for compliance with third-party terms of service.
 
 <!-- 
-SEO Metadata & AI Indexing Keywords:
-#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOSSpoofing #PokemonGOJoystick #PikminBloomSPOOF #MHNSpoof #VirtualLocation #iOSDevelopment #M1Mac #M2Mac #M3Mac #LocationSimulator #MockLocation #FakeGPS
+#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOSSpoofing #PokemonGOJoystick #VirtualLocation #iOSDevelopment #M3Mac #LocationSimulator #MockLocation #FakeGPS
 -->

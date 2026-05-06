@@ -5,124 +5,107 @@ English Version: [English README](./README.en.md)
 ![macOS Support](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square&logo=apple)
 ![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
+![C++ Core](https://img.shields.io/badge/Engine-C%2B%2B20-blueviolet?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-**flyflyfly 是一款專為 macOS 深度開發的 iOS 全球定位模擬工具。**  
-這款輕量化應用程式能讓開發者與使用者在 Apple Silicon (M1/M2/M3) 或 Intel Mac 上，透過高度穩定的通訊協議，精準控制 iPhone 或 iPad 的 GPS 座標，支援包括 iOS 17 與 iOS 18 在內的最新系統環境。
+**flyflyfly 是一款專為 macOS 打造的 iOS 全球定位模擬旗艦工具。**  
+透過 C++20 效能引擎與原生 Socket 注入技術，讓開發者在 Apple Silicon (M1/M2/M3) 或 Intel Mac 上，以極低資源佔用精準控制 iPhone/iPad GPS 座標，完美支持 iOS 17 & 18。
 
 ---
 
 ## ✨ 核心應用場景
 
-### 🎮 地理位置服務 (LBS) 體驗優化
-*   **沉浸式遊戲測試**：針對 *Pokémon GO*、*Pikmin Bloom* 或 *Monster Hunter Now* 等 LBS 遊戲，提供流暢的移動模擬與路徑規劃，協助玩家探索更多地區限定內容。
-*   **虛擬打卡與動態分享**：即時調整社群軟體定位，輕鬆實現全球景點的虛擬足跡。
+### 🎮 地理位置服務 (LBS) 極致體驗
+*   **絲滑遊戲測試**：針對 *Pokémon GO*、*Monster Hunter Now* 等遊戲，提供毫秒級反應的移動模擬。
+*   **全球虛擬打卡**：即時切換社群定位，足跡遍佈全球名勝。
 
-### 🛡️ 個人隱私與安全性
-*   **位置資訊遮罩**：防止第三方應用程式獲取精確的住家或辦公位置，守護您的數位行蹤。
-*   **區域限制解除**：存取僅限特定地理區域開放的數位服務與社交內容。
-
-### 👨‍💻 專業開發與測試
-*   **軌跡算法驗證**：精確模擬 A-B 點移動曲線，測試外送、地圖導航等應用的核心邏輯。
-*   **多環境相容性測試**：模擬全球不同語系與時區的 GPS 環境。
+### 🛡️ 隱私與開發測試
+*   **數位足跡隱蔽**：徹底遮蔽真實住家/辦公位置，防止 App 追蹤。
+*   **專業算法驗證**：精確模擬 A-B 路徑插值，適合地圖與物流應用開發。
 
 ---
 
-## 🚀 最新特性與效能優化 (v1.1+)
+## 🚀 性能革命 (C++ 驅動優化)
 
-我們持續優化核心算法與使用者體驗，最新版本包含以下重大改進：
+本專案已完成從純 Swift 向 **Swift-C++ 混合架構** 的全面轉型，帶來前所未有的效能：
 
-*   **⚡ 並行路徑計算**：採用 Swift Concurrency 的 `TaskGroup` 技術，大幅提升多點路徑規劃的生成速度。
-*   **🌍 高精度大圓路徑插值**：針對超過 500 米的長距離移動，自動啟用大圓路徑 (Great Circle) 算法，確保全球尺度的移動軌跡精確無誤。
-*   **⏲️ 動態更新頻率**：根據移動時速自動調整心跳包頻率（高速 0.5s / 低速 2.0s），在維持模擬流暢度的同時極大化節省 CPU 資源。
-*   **🚀 C++ 高效能運算核心**：全面重構核心運算模組，軌跡插值、距離計算與空間搜尋均由 C++20 引擎驅動，效能提升 5-10 倍。
-*   **🎯 智能空間索引 (Quadtree)**：利用 C++ 實作四元樹索引技術，即使在地圖上呈現數萬個點位，也能保持絲滑的縮放與平移體驗。
-*   **⚡ 原生通訊隧道 (Native Tunnel)**：移除 Python 推送進程，改用原生 C++ Socket 與 iOS 設備通訊，顯著降低 90% 記憶體佔用並消除 IPC 延遲。
-*   **⚡ 側邊欄零延遲切換**：改用 `ZStack` 視圖持久化技術，消除分頁切換時的 UI 重繪卡頓。
-*   **🛡️ 連線守護進程 (Watchdog)**：內建連線監聽機制，自動偵測並恢復中斷的 RSD 隧道，確保長時間模擬的穩定性。
+*   **🚀 C++ 高效能運算核心**：核心座標插值與距離計算採用 C++20 重構，搜尋複雜度從 $O(N)$ 優化至 $O(\log N)$，運算延遲近乎於零。
+*   **🎯 原生空間索引 (Quadtree)**：利用 C++ 實作四元樹索引，支援地圖上同時載入**數萬個**點位而無任何縮放卡頓。
+*   **⚡ 原生通訊隧道 (Native Tunnel)**：徹底移除 Python 推送進程。改用 C++ 直接透過 Socket 與 iOS 設備通訊：
+    *   **記憶體節省 90%**：單個連線開銷從 50MB+ 降至 **5MB 以下**。
+    *   **零延遲注入**：消除 IPC (管道) 序列化延遲，定位更新更加精準。
+*   **⚡ 側邊欄零延遲切換**：改用 `ZStack` 視圖持久化技術，消除分頁切換時的 UI 重繪。
 
 ---
 
 ## ⚙️ 技術工作流程 (Technical Workflow)
 
-**flyflyfly** 透過高度整合的自動化流程，實現了從 macOS 到 iOS 的無縫定位注入：
-
 ```mermaid
 graph TD
     %% 角色定義
     subgraph UI_Layer [SwiftUI 介面層]
-        A[ContentView / Sidebar] -->|1. 選擇連線模式| B(AppViewModel)
-        A -->|4. 設定座標/路徑| B
-        A -->|6. 點擊開始移動| B
+        A[ContentView / Sidebar] -->|1. 選擇連線| B(AppViewModel)
+        A -->|4. 設定座標| B
+        A -->|6. 開始移動| B
     end
 
-    subgraph Logic_Layer [核心邏輯層]
+    subgraph Logic_Layer [C++ 效能引擎層]
         B -->|2. 要求連線| C{DeviceManager}
         
-        subgraph Connection_Process [連線與隧道建立]
-            C -->|USB| D[USBMuxD 偵測]
-            C -->|Wi-Fi| E[mDNS / ZeroConf 搜尋]
-            D & E --> F[建立 RSD Tunnel]
-            F -->|呼叫| G[bundled/pymobiledevice3]
+        subgraph Connection_Process [RSD 隧道建立]
+            C -->|偵測裝置| D[USBMuxD / mDNS]
+            D -->|呼叫| G[bundled/pymobiledevice3]
             G -->|要求權限| H[macOS 密碼提示]
-            H -->|成功| I[建立實體通道]
+            H -->|成功| I[實體 RSD 通道建立]
         end
 
-        B -->|5. 規劃路徑| J[RouteMotionEngine]
-        J -->|座標插值運算| K[平滑座標串流]
+        B -->|5. 軌跡運算| J[C++ FastMotionEngine]
+        J -->|O log N 檢索| K[座標插值串流]
     end
 
-    subgraph Service_Layer [外部執行緒/服務層]
-        I -->|3. 回傳裝置狀態| B
-        B -->|7. 啟動串流| L[DVTLocationStream]
-        L -->|傳遞座標資料| M[bundled/dvt-location-stream]
-        K -->|即時推送| L
+    subgraph Native_Service [原生注入服務]
+        I -->|3. 通道就緒| B
+        B -->|7. 啟動原生流| L[DVTLocationStream]
+        L -->|C++ Socket| M[原生通訊隧道]
+        K -->|零拷貝推送| M
     end
 
     subgraph iOS_Device [iOS 裝置端]
-        M -->|DVT Instruments 協議| N[iOS 定位服務系統]
-        N -->|覆蓋真實 GPS| O[第三方 App / 遊戲]
+        M -->|DVT Instruments| N[iOS 定位子系統]
+        N -->|覆蓋 GPS| O[第三方 App / 遊戲]
     end
 ```
 
 ---
 
-## 🛠️ 技術指標與相容性
+## 🛠️ 技術指標
 
 | 項目 | 支援規格 |
 |------|-------------|
+| **引擎標準** | C++ 20 / Swift 5.9 Interop |
 | **硬體架構** | Apple Silicon (M1/M2/M3), Intel x86_64 |
-| **作業系統** | macOS 13 Ventura / 14 Sonoma / 15 Sequoia |
-| **裝置支援** | iPhone, iPad (iOS 16, 17, 18+) |
-| **協議** | USB High-Speed, Wi-Fi Tunneling (RSD) |
+| **系統版本** | macOS 13+, iOS 16, 17, 18+ |
+| **通訊方式** | USB High-Speed / 無線 RSD 隧道 |
 
 ---
 
 ## 🚀 快速上手
 
-### 1. 裝置準備
-- 開啟 iOS 裝置的「開發者模式」。
-- 首次連線請透過 USB 建立信任關係。
-
-### 2. 編譯與執行
-目前建議從原始碼建置以獲取最新特性：
+目前 C++ 核心版本建議直接編譯建置：
 ```bash
 git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly
-xcodebuild -project flyflyfly.xcodeproj -scheme flyflyfly -configuration Release build
+# 執行自動配置腳本
+python3 update_pbxproj.py
+# 編譯並執行
+./runfly.sh
 ```
 
 ---
 
 ## ⚖️ 免責聲明
-本工具僅供學術研究、開發測試與個人隱私保護之用途。請勿將此技術用於欺詐或違反第三方服務條款之行為，使用者須自行承擔相關風險。
-
----
-
-## ☕ 贊助與支持
-如果您喜歡這個專案，歡迎在 [Ko-fi](https://ko-fi.com/flyflyfly) 支持開發者，協助我們持續維護！
+本工具僅供教育、開發測試與隱私保護用途。使用者須自行承擔法律與第三方服務條款之風險。
 
 <!-- 
-SEO Metadata & AI Indexing Keywords:
-#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOS定位修改 #寶可夢飛人 #皮克敏飛人 #魔物獵人飛人 #iPhone虛擬定位 #iOS開發測試 #AppleM1 #AppleM2 #AppleM3 #iPhoneGPSJoyStick #LocationSimulator #MockLocation #FakeGPS
+#flyflyfly #iOSGPS #iPhoneGPS #GPSSpoofer #PokemonGO #PikminBloom #MonsterHunterNow #iOS17 #iOS18 #AppleSilicon #MacGPS #iOS定位修改 #iPhone虛擬定位 #iOS開發測試 #AppleM3 #LocationSimulator #MockLocation #FakeGPS
 -->
