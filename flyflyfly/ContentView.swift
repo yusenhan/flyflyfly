@@ -23,7 +23,6 @@ struct ContentView: View {
     @State var pendingImportedOverlays: [PurePointOverlay] = []
     @State var pendingImportedOverlayTitles: [String: String] = [:]
     @State var isShowingImportedOverlayNamingSheet: Bool = false
-    @State var sidebarTab: Int = 0 // 0: 模擬, 1: 圖層/收藏, 2: 設定
     let routeColors: [Color] = [.yellow, .orange, .mint, .pink]
     private let purePointViewportPadding = AppConstants.PurePoint.viewportPadding
 

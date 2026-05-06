@@ -135,7 +135,7 @@ struct FavoritesSectionView: View {
                                     },
                                     label: {
                                         HStack {
-                                            Label(mode.rawValue, systemImage: mode == .point ? "mappin.and.ellipse" : "point.topleft.downcurvedto.point.bottomright.curvepath")
+                                            Label(mode.rawValue, systemImage: mode == .point ? "mappin.and.ellipse" : "map.fill")
                                                 .font(.subheadline)
                                                 .fontWeight(.bold)
                                                 .foregroundColor(ModernTheme.accent)

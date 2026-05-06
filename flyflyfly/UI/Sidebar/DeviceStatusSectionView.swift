@@ -24,7 +24,30 @@ struct DeviceStatusSectionView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+                
                 Spacer()
+
+                if vm.deviceManager.isConnected {
+                    Button(action: { vm.deviceManager.disconnect() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .help("斷開連線")
+                } else {
+                    Button(action: { vm.deviceManager.connectDevice() }) {
+                        Text(vm.deviceManager.isConnecting ? "連線中..." : "連線")
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(vm.deviceManager.isConnecting ? Color.gray : ModernTheme.accent)
+                            .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(vm.deviceManager.isConnecting)
+                }
             }
             .padding(10)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))

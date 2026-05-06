@@ -278,11 +278,25 @@ struct LegacyMapView: NSViewRepresentable {
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-            self.parent.vm.visibleMapRegion = mapView.region
+            let newRegion = mapView.region
             
-            // Only sync mapRegion back to VM if it was user-driven (not from updateNSView)
+            // 1. Strictly check if the region actually changed significantly to avoid feedback loops
+            let currentVisible = self.parent.vm.visibleMapRegion
+            let latDiff = abs(currentVisible.center.latitude - newRegion.center.latitude)
+            let lonDiff = abs(currentVisible.center.longitude - newRegion.center.longitude)
+            let spanLatDiff = abs(currentVisible.span.latitudeDelta - newRegion.span.latitudeDelta)
+            let spanLonDiff = abs(currentVisible.span.longitudeDelta - newRegion.span.longitudeDelta)
+            
+            if latDiff > 0.000001 || lonDiff > 0.000001 || spanLatDiff > 0.00001 || spanLonDiff > 0.00001 {
+                self.parent.vm.visibleMapRegion = newRegion
+            }
+            
+            // 2. Only sync mapRegion back to VM if it was user-driven
             if !isUpdatingFromExternal {
-                self.parent.vm.mapRegion = mapView.region
+                let currentTarget = self.parent.vm.mapRegion
+                if abs(currentTarget.center.latitude - newRegion.center.latitude) > 0.000001 {
+                    self.parent.vm.mapRegion = newRegion
+                }
             }
         }
 

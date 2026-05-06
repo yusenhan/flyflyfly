@@ -4,7 +4,6 @@ import MapKit
 @MainActor
 struct MovementSettingsSectionView: View {
     @ObservedObject var vm: AppViewModel
-    @Binding var speedText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -41,15 +40,14 @@ struct MovementSettingsSectionView: View {
                     }
                 }
                 .font(.callout)
-                Slider(
-                    value: $vm.speed,
-                    in: AppConstants.Simulation.speedStep...vm.maximumSpeed,
-                    step: AppConstants.Simulation.speedStep
-                )
+                
                 HStack(spacing: 8) {
-                    TextField("速度", text: $speedText)
+                    TextField("速度", text: $vm.speedText)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 88)
+                        .onSubmit {
+                            vm.updateSpeedFromText()
+                        }
 
                     Stepper(
                         "微調 0.1",

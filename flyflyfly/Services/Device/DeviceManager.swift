@@ -933,7 +933,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
     }
 
-    private func resolveCLI() throws -> [String] {
+    func resolveCLI() throws -> [String] {
         if let path = cachedCLIPath { return [path] }
         let path = try resolveCLIPath()
         cachedCLIPath = path

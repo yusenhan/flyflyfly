@@ -163,7 +163,11 @@ final class AppViewModel: ObservableObject {
     // MARK: - Settings (Delegated)
     var speed: Double {
         get { simulationStore.speed }
-        set { simulationStore.speed = newValue }
+        set {
+            simulationStore.speed = newValue
+            // Keep text in sync
+            speedText = String(format: "%.1f", newValue)
+        }
     }
     var isEndlessLoop: Bool {
         get { simulationStore.isEndlessLoop }
@@ -229,15 +233,19 @@ final class AppViewModel: ObservableObject {
         get { deviceManager.tunnelUDID }
         set { deviceManager.tunnelUDID = newValue }
     }
-    var isWirelessMode: Bool {
-        get { deviceManager.isWirelessMode }
-        set { deviceManager.isWirelessMode = newValue }
+    @Published var isWirelessMode: Bool = false {
+        didSet {
+            deviceManager.isWirelessMode = isWirelessMode
+        }
     }
+    
     var developerModeDisabled: Bool { deviceManager.developerModeDisabled }
     var debugLog: [String] { deviceManager.debugLog }
 
     let maximumSpeed = AppConstants.Simulation.maximumSpeed
 
+    @Published var speedText: String = ""
+    
     // MARK: - Initialization
     
     init(deviceManager: any DeviceControlling, locationSearchService: any LocationSearching) {
@@ -253,15 +261,35 @@ final class AppViewModel: ObservableObject {
         self.searchViewModel = SearchViewModel(mapStateStore: mapStore, locationSearchService: locationSearchService)
         self.searchViewModel.setAppViewModel(self)
         
-        // Link changes from stores to AppViewModel to trigger View updates
-        deviceStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        simulationStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        mapStateStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        purePointStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        favoriteStore.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        searchViewModel.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        // Initialize speed text
+        self.speedText = String(format: "%.1f", simulationStore.speed)
+        self.isWirelessMode = deviceManager.isWirelessMode
+        
+        // Link changes from stores to AppViewModel to trigger View updates with stable throttling
+        deviceStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        simulationStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        mapStateStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        purePointStore.objectWillChange.throttle(for: .milliseconds(500), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        favoriteStore.objectWillChange.debounce(for: .milliseconds(100), scheduler: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        searchViewModel.objectWillChange.debounce(for: .milliseconds(100), scheduler: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         
         setupDeviceObservers()
+        
+        // Pre-warm CLI path in background task to avoid lag on first use in Settings tab
+        Task {
+            _ = try? deviceManager.resolveCLI()
+        }
+    }
+
+    func updateSpeedFromText() {
+        let trimmed = speedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = Double(trimmed) else {
+            // Reset to current speed if invalid
+            speedText = String(format: "%.1f", speed)
+            return
+        }
+        speed = min(max(parsed, AppConstants.Simulation.speedStep), maximumSpeed)
+        speedText = String(format: "%.1f", speed)
     }
 
     // MARK: - Favorites helper

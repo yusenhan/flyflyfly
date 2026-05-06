@@ -34,7 +34,10 @@ The project has fully transitioned to a **Swift-C++ Hybrid Architecture**, deliv
 *   **⚡ Native Communication Tunnel**: Replaced the external Python push process with a native C++ Socket client:
     - **90% Memory Reduction**: Footprint per connection dropped from 50MB+ to **under 5MB**.
     - **Zero-Latency Injection**: Eliminates IPC (Pipe) serialization overhead for more instantaneous location updates.
-*   **⚡ Zero-Lag Sidebar Tab Switching**: Uses `ZStack` view persistence to eliminate UI layout recalculations during transitions.
+*   **📐 Collapsible Control Panel**: Replaces legacy tabs with a collapsible vertical layout, eliminating transition lag and improving usability.
+*   **⚡ Zero-Lag Sidebar Experience**: Optimized UI architecture and C++ engine isolation ensure millisecond-level responsiveness.
+*   **🔌 Intuitive Connection Management**: The connect button is integrated directly into the device status row for one-click pairing between iPhone and Mac.
+*   **📦 Precise Speed Control**: Removed redundant sliders in favor of combined TextField and Stepper, offering more professional and stable speed settings.
 
 ---
 

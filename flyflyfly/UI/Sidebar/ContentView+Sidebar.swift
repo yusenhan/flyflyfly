@@ -38,7 +38,7 @@ extension ContentView {
 
     var wirelessModeBinding: Binding<Bool> {
         Binding(
-            get: { vm.deviceManager.isWirelessMode },
+            get: { vm.isWirelessMode },
             set: { newValue in
                 let manager = vm.deviceManager
                 guard manager.isWirelessMode != newValue else { return }
@@ -48,12 +48,12 @@ extension ContentView {
                     Task {
                         await manager.disconnectAsync()
                         DispatchQueue.main.async {
-                            manager.isWirelessMode = newValue
+                            vm.isWirelessMode = newValue
                             manager.connectDevice()
                         }
                     }
                 } else {
-                    manager.isWirelessMode = newValue
+                    vm.isWirelessMode = newValue
                 }
             }
         )
@@ -92,7 +92,6 @@ extension ContentView {
                 .monospacedDigit()
                 .foregroundColor(.secondary)
             } else {
-                // Fixed height placeholder to prevent jumping
                 Text("目前座標：尚未開始模擬")
                     .font(.caption)
                     .foregroundColor(.clear)
@@ -176,25 +175,14 @@ extension ContentView {
         }
     }
 
+    @ViewBuilder
     func sidebarSections(isCompactSidebar: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 1. Tab Picker
-            Picker("", selection: $sidebarTab) {
-                Label("模擬", systemImage: "location.north.fill").tag(0)
-                Label("資料", systemImage: "tray.full.fill").tag(1)
-                Label("配置", systemImage: "slider.horizontal.3").tag(2)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, isCompactSidebar ? 10 : 16)
-            .padding(.bottom, 12)
-            .padding(.top, 8)
-            
-            Divider()
-
-            ZStack(alignment: .topLeading) {
-                // Tab 0: 模擬
-                if sidebarTab == 0 {
-                    ScrollView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    
+                    // Section 1: 模擬控制
+                    CollapsibleSection(title: "模擬控制", icon: "location.north.fill", defaultExpanded: true) {
                         VStack(alignment: .leading, spacing: 16) {
                             operationModePicker
                             deviceStatusSection(isCompactSidebar: isCompactSidebar)
@@ -205,43 +193,42 @@ extension ContentView {
                                     .transition(.move(edge: .top).combined(with: .opacity))
                             }
                         }
-                        .padding(.horizontal, isCompactSidebar ? 10 : 16)
-                        .padding(.vertical, 16)
+                        .padding(.bottom, 8)
                     }
-                }
+                    
+                    Divider().opacity(0.5)
 
-                // Tab 1: 資料
-                if sidebarTab == 1 {
-                    ScrollView {
+                    // Section 2: 我的最愛與圖層
+                    CollapsibleSection(title: "資料與圖層", icon: "tray.full.fill", defaultExpanded: false) {
                         VStack(alignment: .leading, spacing: 20) {
                             Text("常用收藏").font(.subheadline.bold())
                             FavoritesSectionView(vm: vm)
-                        }
-                        .padding(.horizontal, isCompactSidebar ? 10 : 16)
-                        .padding(.vertical, 16)
-                    }
-                }
-
-                // Tab 2: 設定
-                if sidebarTab == 2 {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("移動參數").font(.subheadline.bold())
-                            movementSettingsSection
                             
                             Divider()
                             
-                            Text("連線與診斷").font(.subheadline.bold())
-                            deviceStatusSection(isCompactSidebar: isCompactSidebar) // Move diagnostic info here too if needed
+                            Text("地圖圖層").font(.subheadline.bold())
+                            purePointControlsSection(isCompactSidebar: isCompactSidebar)
                         }
-                        .padding(.horizontal, isCompactSidebar ? 10 : 16)
-                        .padding(.vertical, 16)
+                        .padding(.bottom, 8)
+                    }
+                    
+                    Divider().opacity(0.5)
+
+                    // Section 3: 參數設定
+                    CollapsibleSection(title: "配置設定", icon: "slider.horizontal.3", defaultExpanded: false) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("移動參數").font(.subheadline.bold())
+                            MovementSettingsSectionView(vm: vm)
+                        }
+                        .padding(.bottom, 8)
                     }
                 }
+                .padding(.horizontal, isCompactSidebar ? 10 : 16)
+                .padding(.vertical, 16)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            // 3. Fixed Footer for Critical Controls
+            // Fixed Footer
             VStack(spacing: 12) {
                 Divider()
                 pinnedCoordinateSection
@@ -250,7 +237,7 @@ extension ContentView {
             .padding(.horizontal, isCompactSidebar ? 10 : 16)
             .padding(.bottom, 16)
             .padding(.top, 8)
-            .background(Material.regular) // Ensure footer is distinct
+            .background(Material.regular)
         }
         .frame(maxWidth: .infinity)
     }
@@ -280,25 +267,6 @@ extension ContentView {
                 purePointOverlaySection(overlay, isCompactSidebar: isCompactSidebar)
             }
         }
-    }
-
-    var speedTextBinding: Binding<String> {
-        Binding(
-            get: { String(format: "%.1f", vm.speed) },
-            set: { newValue in
-                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let parsed = Double(trimmed) else { return }
-                vm.speed = min(max(parsed, AppConstants.Simulation.speedStep), vm.maximumSpeed)
-            }
-        )
-    }
-
-    @ViewBuilder
-    var movementSettingsSection: some View {
-        MovementSettingsSectionView(
-            vm: vm,
-            speedText: speedTextBinding
-        )
     }
 
     var routeReplacementSheetBinding: Binding<Bool> {
@@ -335,5 +303,57 @@ extension ContentView {
         }
         .padding(24)
         .frame(width: 420)
+    }
+}
+
+// MARK: - Support View
+
+struct CollapsibleSection<Content: View>: View {
+    let title: String
+    let icon: String
+    @State private var isExpanded: Bool
+    let content: () -> Content
+
+    init(title: String, icon: String, defaultExpanded: Bool = false, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.icon = icon
+        self._isExpanded = State(initialValue: defaultExpanded)
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: { 
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { 
+                    isExpanded.toggle() 
+                } 
+            }) {
+                HStack {
+                    Image(systemName: icon)
+                        .foregroundColor(ModernTheme.accent)
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 24)
+                    
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(ModernTheme.label)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundColor(.secondary.opacity(0.8))
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                content()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 }

@@ -22,6 +22,7 @@ protocol DeviceControlling: AnyObject {
     var objectWillChange: ObservableObjectPublisher { get }
 
     func connect()
+    func resolveCLI() throws -> [String]
     func connectDevice()
     func disconnect()
     func sendCoordinate(latitude: Double, longitude: Double)
