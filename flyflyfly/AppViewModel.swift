@@ -383,6 +383,10 @@ final class AppViewModel: ObservableObject {
         return nil
     }
 
+    private var _cachedEstimatedTime: String = "--"
+    private var _lastEstimatedSpeed: Double = 0
+    private var _lastEstimatedDistance: Double = 0
+    
     var estimatedTime: String {
         let distance: Double
         if let route = selectedRoute {
@@ -394,14 +398,36 @@ final class AppViewModel: ObservableObject {
         } else {
             return "--"
         }
+        
+        // Cache optimization
+        if abs(speed - _lastEstimatedSpeed) < 0.1 && abs(distance - _lastEstimatedDistance) < 1.0 {
+            return _cachedEstimatedTime
+        }
+        
         let timeSeconds = distance / (speed * (1000.0 / 3600.0))
         if timeSeconds.isInfinite || timeSeconds.isNaN { return "--" }
-        return "\(Int(timeSeconds) / 60) 分 \(Int(timeSeconds) % 60) 秒"
+        let result = "\(Int(timeSeconds) / 60) 分 \(Int(timeSeconds) % 60) 秒"
+        
+        _cachedEstimatedTime = result
+        _lastEstimatedSpeed = speed
+        _lastEstimatedDistance = distance
+        
+        return result
     }
+
+    private var _cachedProgress: String? = nil
+    private var _lastTraveledForProgress: Double = -1
+    private var _lastIsEndlessForProgress: Bool = false
 
     var progressPercentage: String? {
         guard isActiveSimulationRunning, totalRouteDistance > 0 else { return nil }
-        
+
+        // Cache check
+        if abs(traveledDistance - _lastTraveledForProgress) < 0.5 && isEndlessLoop == _lastIsEndlessForProgress {
+            return _cachedProgress
+        }
+
+        let result: String
         if isEndlessLoop {
             let cycleDistance = totalRouteDistance * 2.0
             let phase = traveledDistance.truncatingRemainder(dividingBy: cycleDistance)
@@ -409,14 +435,18 @@ final class AppViewModel: ObservableObject {
             let current = isReturning ? (cycleDistance - phase) : phase
             let percent = (current / totalRouteDistance) * 100
             let direction = isReturning ? " (回程)" : " (去程)"
-            return String(format: "%.1f%%%@", percent, direction)
+            result = String(format: "%.1f%%%@", percent, direction)
         } else {
             let current = min(traveledDistance, totalRouteDistance)
             let percent = (current / totalRouteDistance) * 100
-            return String(format: "%.1f%%", percent)
+            result = String(format: "%.1f%%", percent)
         }
-    }
 
+        _cachedProgress = result
+        _lastTraveledForProgress = traveledDistance
+        _lastIsEndlessForProgress = isEndlessLoop
+        return result
+    }
     var buttonTitle: String {
         if !deviceManager.isConnected && (hasReadyDraft || hasActiveRouteSnapshot) {
             return "請先連線裝置"
