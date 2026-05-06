@@ -107,6 +107,12 @@ python3 update_pbxproj.py
 
 ---
 
+## 📚 延伸文檔 (Documentation)
+*   **[功能規格文件 (FSD)](./docs/FunctionalSpecification.md)**：詳細功能模組與使用者操作流程。
+*   **[系統設計文件 (SD)](./docs/SystemDesign.md)**：技術架構、C++ 引擎與效能優化細節。
+
+---
+
 ## ⚖️ 免責聲明
 本工具僅供教育、開發測試與隱私保護用途。使用者須自行承擔法律與第三方服務條款之風險。
 
