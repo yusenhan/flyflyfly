@@ -260,7 +260,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         tunnelUDID = defaults.string(forKey: Self.tunnelUDIDKey) ?? ""
         isWirelessMode = defaults.bool(forKey: Self.wirelessModeKey)
         
-        cachedCLIPath = try? resolveCLIPath()
+        // CLI path will be resolved lazily on first use
     }
 
     deinit {

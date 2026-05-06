@@ -43,21 +43,35 @@ final class PurePointStore: ObservableObject {
     }
 
     private func rebuildSpatialIndex() {
-        // Flatten all points from all AVAILABLE overlays into a single list for C++ indexing
-        let allPoints = availableOverlays.flatMap { overlay in
-            overlay.points.map { point in
-                VisiblePurePoint(
-                    overlay: overlay,
-                    point: point,
-                    category: overlay.categories.first(where: { $0.id == point.categoryID })
-                )
+        let currentOverlays = availableOverlays
+        
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
+            
+            // 1. Flatten all points (Background)
+            let allPoints = currentOverlays.flatMap { overlay in
+                overlay.points.map { point in
+                    VisiblePurePoint(
+                        overlay: overlay,
+                        point: point,
+                        category: overlay.categories.first(where: { $0.id == point.categoryID })
+                    )
+                }
+            }
+            
+            // 2. Wrap coordinates (Background)
+            let nsCoords = allPoints.map { NSValue(mkCoordinate: $0.point.coordinate) }
+            
+            // 3. Update internal state on MainActor
+            await MainActor.run {
+                self.allVisiblePointsLookup = allPoints
+                self.spatialIndex.buildSpatialIndex(withPoints: nsCoords)
+                print("[SpatialIndex] Rebuilt index with \(allPoints.count) points in background")
+                
+                // Trigger a re-render now that the index is ready
+                self.updateRenderedPoints()
             }
         }
-        self.allVisiblePointsLookup = allPoints
-        
-        let nsCoords = allPoints.map { NSValue(mkCoordinate: $0.point.coordinate) }
-        spatialIndex.buildSpatialIndex(withPoints: nsCoords)
-        print("[SpatialIndex] Rebuilt index with \(allPoints.count) points")
     }
     
     private func loadInitialOverlays() async {
