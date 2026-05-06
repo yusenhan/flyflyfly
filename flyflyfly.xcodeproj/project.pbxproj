@@ -56,6 +56,10 @@
 		96DFD74941514DBB8F24E741 /* FavoritesSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8529E39380654F9B85850725 /* FavoritesSectionView.swift */; };
 		8AED6360ABD34A5F8A1E1476 /* FavoriteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5822344A94FA412DA875BD94 /* FavoriteStore.swift */; };
 		A9E1FDD47AF64994B16D050F /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35C4A4CECA945D1BFCFFC83 /* SearchViewModel.swift */; };
+		834D2B221699467C9FAAF944 /* FastMotionEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E488ACD99F6744FDA646B34C /* FastMotionEngine.cpp */; };
+		FC8820D4753F49159130B651 /* FastMotionEngineWrapper.mm in Sources */ = {isa = PBXBuildFile; fileRef = A88D28A7F40E49ECAF542AB2 /* FastMotionEngineWrapper.mm */; };
+		9C08D2DB5A4E4FB494EF6307 /* SpatialIndex.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F8CF882720C4704A1094E7F /* SpatialIndex.cpp */; };
+		4E15B0841FF94E99915F05BB /* NativeTunnel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3F57B8AF77954FAC8FE89BF7 /* NativeTunnel.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,6 +134,16 @@
 		8529E39380654F9B85850725 /* FavoritesSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesSectionView.swift"; sourceTree = "<group>"; };
 		5822344A94FA412DA875BD94 /* FavoriteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoriteStore.swift"; sourceTree = "<group>"; };
 		F35C4A4CECA945D1BFCFFC83 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SearchViewModel.swift"; sourceTree = "<group>"; };
+		E488ACD99F6744FDA646B34C /* FastMotionEngine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "FastMotionEngine.cpp"; sourceTree = "<group>"; };
+		33DEEDF9E60E4AA394782E74 /* FastMotionEngine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "FastMotionEngine.hpp"; sourceTree = "<group>"; };
+		5276E6D749C14E5599A78557 /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = text; path = "module.modulemap"; sourceTree = "<group>"; };
+		958B8F3C6E6B484BB067589D /* flyflyfly-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "flyflyfly-Bridging-Header.h"; sourceTree = "<group>"; };
+		F3D89B55B78F44CEA80F91E0 /* FastMotionEngineWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FastMotionEngineWrapper.h"; sourceTree = "<group>"; };
+		A88D28A7F40E49ECAF542AB2 /* FastMotionEngineWrapper.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "FastMotionEngineWrapper.mm"; sourceTree = "<group>"; };
+		72BC277BE8044D0894A703CC /* SpatialIndex.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "SpatialIndex.hpp"; sourceTree = "<group>"; };
+		1F8CF882720C4704A1094E7F /* SpatialIndex.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "SpatialIndex.cpp"; sourceTree = "<group>"; };
+		3F57B8AF77954FAC8FE89BF7 /* NativeTunnel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "NativeTunnel.cpp"; sourceTree = "<group>"; };
+		5403D10F691F4EEB826A3884 /* NativeTunnel.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "NativeTunnel.hpp"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 
@@ -184,6 +198,7 @@
 		CA9AF84F2F5539E300AC05E8 /* flyflyfly */ = {
 			isa = PBXGroup;
 			children = (
+				958B8F3C6E6B484BB067589D,
 				988E3CA6A19AA13ABD3BBF55,
 				F088C6F52611BE5E1BD037A7,
 				73C0913FCB0313D14BDDC632,
@@ -283,6 +298,15 @@
 		32BCB49FFA7440C038DFBCD6 /* Algorithms */ = {
 			isa = PBXGroup;
 			children = (
+				5403D10F691F4EEB826A3884,
+				3F57B8AF77954FAC8FE89BF7,
+				1F8CF882720C4704A1094E7F,
+				72BC277BE8044D0894A703CC,
+				A88D28A7F40E49ECAF542AB2,
+				F3D89B55B78F44CEA80F91E0,
+				5276E6D749C14E5599A78557,
+				33DEEDF9E60E4AA394782E74,
+				E488ACD99F6744FDA646B34C,
 				A4AE2831A0FB2D0830EF5D6A,
 			);
 			path = "Algorithms"; sourceTree = "<group>";
@@ -554,6 +578,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4E15B0841FF94E99915F05BB,
+				9C08D2DB5A4E4FB494EF6307,
+				FC8820D4753F49159130B651,
+				834D2B221699467C9FAAF944,
 				A9E1FDD47AF64994B16D050F,
 				96DFD74941514DBB8F24E741,
 				8AED6360ABD34A5F8A1E1476,
@@ -677,6 +705,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				
 			};
@@ -724,6 +755,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				
 			};
@@ -866,6 +900,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/flyflyfly.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/flyflyfly";
 				
@@ -893,6 +930,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/flyflyfly.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/flyflyfly";
 				
@@ -919,6 +959,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				TEST_TARGET_NAME = flyflyfly;
 				
@@ -945,6 +988,9 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.9;
+				SWIFT_OBJC_BRIDGING_HEADER = "flyflyfly/flyflyfly-Bridging-Header.h";
+				SWIFT_INCLUDE_PATHS = "flyflyfly/Core/Algorithms";
+				SWIFT_CXX_INTEROPERABILITY_MODE = "default";
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				TEST_TARGET_NAME = flyflyfly;
 				

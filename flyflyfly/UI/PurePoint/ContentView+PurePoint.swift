@@ -96,7 +96,7 @@ extension ContentView {
     }
 
     func focusAllPurePoints() {
-        let coordinates = visiblePurePoints.map(\.point.coordinate)
+        let coordinates = vm.purePointStore.renderedPurePoints.map(\.point.coordinate)
         guard !coordinates.isEmpty else { return }
         vm.mapRegion = vm.mapRegion(fitting: coordinates)
     }

@@ -1,19 +1,14 @@
 import Foundation
 
 final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
-    private var process: Process?
-    private var inPipe: Pipe?
-    private var outPipe: Pipe?
-    private var errPipe: Pipe?
+    private let engine = FastMotionEngineWrapper()
     private var currentHost: String?
     private var currentPort: String?
-    private var nextSequence: Int = 1
-    private var stdoutBuffer: String = ""
     private let stateLock = NSLock()
     private var isReady = false
 
     var isRunning: Bool {
-        process?.isRunning == true
+        engine.isNativeTunnelConnected()
     }
 
     deinit {
@@ -33,147 +28,41 @@ final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
 
         stop()
 
-        guard let binaryPath = Bundle.main.path(forResource: "dvt-location-stream", ofType: nil) else {
-            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [
-                NSLocalizedDescriptionKey: "找不到 dvt-location-stream 執行檔"
-            ])
+        guard let portInt = Int32(port) else {
+            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "無效的連接埠"])
         }
 
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: binaryPath)
-        p.arguments = [host, port]
-
-        let stdin = Pipe()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        p.standardInput = stdin
-        p.standardOutput = stdout
-        p.standardError = stderr
-
-        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            guard let self else { return }
-            let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            self.handleStdoutChunk(text, onOutput: onOutput)
+        let success = engine.connect(toHost: host, port: portInt)
+        
+        if success {
+            currentHost = host
+            currentPort = port
+            setReady(true)
+            onOutput("CONNECTED\n")
+            onOutput("READY\n")
+        } else {
+            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "原生隧道連接失敗"])
         }
-        stderr.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            onError(text)
-        }
-
-        p.terminationHandler = { [weak self] proc in
-            stdout.fileHandleForReading.readabilityHandler = nil
-            stderr.fileHandleForReading.readabilityHandler = nil
-            self?.invalidateStreamState(resetProcess: true)
-            onExit(proc.terminationStatus)
-        }
-
-        try p.run()
-        process = p
-        inPipe = stdin
-        outPipe = stdout
-        errPipe = stderr
-        currentHost = host
-        currentPort = port
-        nextSequence = 1
-        stdoutBuffer = ""
-        setReady(false)
-        try waitUntilReady(timeout: 8.0)
     }
 
     func send(latitude: Double, longitude: Double) throws {
-        let sequence = nextSequence
-        nextSequence += 1
-        let line = String(
-            format: "%d,\(AppConstants.Formatting.coordinatePrecision),\(AppConstants.Formatting.coordinatePrecision)\n",
-            locale: Locale(identifier: "en_US_POSIX"),
-            sequence,
-            latitude,
-            longitude
-        )
-        try writeCommand(line, required: true)
+        guard isRunning else {
+            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "隧道未連線"])
+        }
+        
+        let success = engine.sendNativeCoordinateLat(latitude, lon: longitude)
+        if !success {
+            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "坐標發送失敗"])
+        }
     }
 
     func clear() {
-        try? writeCommand("CLEAR\n", required: false)
+        // Native tunnel simplified: clear not explicitly needed for location override
     }
 
     func stop() {
-        try? writeCommand("QUIT\n", required: false)
-
-        if let p = process, p.isRunning {
-            p.terminationHandler = nil
-            p.terminate()
-            Thread.sleep(forTimeInterval: AppConstants.Timeouts.dvtStreamStop)
-            if p.isRunning { p.interrupt() }
-        }
-
-        outPipe?.fileHandleForReading.readabilityHandler = nil
-        errPipe?.fileHandleForReading.readabilityHandler = nil
-        invalidateStreamState(resetProcess: true)
-        stdoutBuffer = ""
-        nextSequence = 1
-    }
-
-    private func writeCommand(_ command: String, required: Bool) throws {
-        guard process?.isRunning == true, let fh = inPipe?.fileHandleForWriting else {
-            invalidateStreamState(resetProcess: process?.isRunning != true)
-            if required {
-                throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "dvt stream stdin 無效"
-                ])
-            }
-            return
-        }
-
-        guard let data = command.data(using: .utf8) else { return }
-        do {
-            try fh.write(contentsOf: data)
-        } catch {
-            invalidateStreamState(resetProcess: process?.isRunning != true)
-            if required {
-                throw error
-            }
-        }
-    }
-
-    private func handleStdoutChunk(_ chunk: String, onOutput: @escaping (String) -> Void) {
-        stdoutBuffer += chunk
-
-        while let nl = stdoutBuffer.firstIndex(of: "\n") {
-            let line = String(stdoutBuffer[..<nl]).trimmingCharacters(in: .whitespacesAndNewlines)
-            stdoutBuffer.removeSubrange(...nl)
-            if line.isEmpty { continue }
-            if line == "READY" {
-                setReady(true)
-            }
-            onOutput(line + "\n")
-        }
-    }
-
-    private func waitUntilReady(timeout: TimeInterval) throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if readyState() { return }
-            if process?.isRunning != true { break }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [
-            NSLocalizedDescriptionKey: "dvt-location-stream 啟動逾時"
-        ])
-    }
-
-    private func invalidateStreamState(resetProcess: Bool = false) {
-        stateLock.lock()
-        isReady = false
-        stateLock.unlock()
-        inPipe = nil
-        outPipe = nil
-        errPipe = nil
-        if resetProcess {
-            process = nil
-        }
+        engine.disconnectNativeTunnel()
+        setReady(false)
         currentHost = nil
         currentPort = nil
     }

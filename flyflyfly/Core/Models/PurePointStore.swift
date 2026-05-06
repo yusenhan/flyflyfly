@@ -4,7 +4,11 @@ import Combine
 
 @MainActor
 final class PurePointStore: ObservableObject {
-    @Published var availableOverlays: [PurePointOverlay] = []
+    @Published var availableOverlays: [PurePointOverlay] = [] {
+        didSet {
+            rebuildSpatialIndex()
+        }
+    }
     @Published var selectedOverlayIDs: Set<String> = []
     @Published var renderedPurePoints: [VisiblePurePoint] = []
     @Published var isLoading: Bool = false
@@ -14,6 +18,8 @@ final class PurePointStore: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     private let mapStateStore: MapStateStore
+    private let spatialIndex = FastMotionEngineWrapper()
+    private var allVisiblePointsLookup: [VisiblePurePoint] = []
     
     init(mapStateStore: MapStateStore) {
         self.mapStateStore = mapStateStore
@@ -23,18 +29,35 @@ final class PurePointStore: ObservableObject {
             await loadInitialOverlays()
         }
         
-        // Re-render when region or overlays change
-        Publishers.CombineLatest3(
+        // Re-render when region or selected overlays change
+        Publishers.CombineLatest(
             mapStateStore.$visibleMapRegion,
-            $availableOverlays,
             $selectedOverlayIDs
         )
-        .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+        .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
         .sink { [weak self] _ in
             guard let self = self else { return }
             self.updateRenderedPoints()
         }
         .store(in: &cancellables)
+    }
+
+    private func rebuildSpatialIndex() {
+        // Flatten all points from all AVAILABLE overlays into a single list for C++ indexing
+        let allPoints = availableOverlays.flatMap { overlay in
+            overlay.points.map { point in
+                VisiblePurePoint(
+                    overlay: overlay,
+                    point: point,
+                    category: overlay.categories.first(where: { $0.id == point.categoryID })
+                )
+            }
+        }
+        self.allVisiblePointsLookup = allPoints
+        
+        let nsCoords = allPoints.map { NSValue(mkCoordinate: $0.point.coordinate) }
+        spatialIndex.buildSpatialIndex(withPoints: nsCoords)
+        print("[SpatialIndex] Rebuilt index with \(allPoints.count) points")
     }
     
     private func loadInitialOverlays() async {
@@ -50,28 +73,19 @@ final class PurePointStore: ObservableObject {
     }
     
     func updateRenderedPoints() {
-        let currentOverlays = availableOverlays
-        let selectedIDs = selectedOverlayIDs
         let region = mapStateStore.visibleMapRegion
+        let selectedIDs = selectedOverlayIDs
+        let lookup = allVisiblePointsLookup
+        let index = spatialIndex
         
         Task {
             let newState = await Task.detached(priority: .userInitiated) {
-                // Perform all data processing in background
-                let activeOverlays = currentOverlays.filter { selectedIDs.contains($0.id) }
-                let allVisiblePoints = activeOverlays.flatMap { overlay in
-                    overlay.points.map { point in
-                        VisiblePurePoint(
-                            overlay: overlay,
-                            point: point,
-                            category: overlay.categories.first(where: { $0.id == point.categoryID })
-                        )
-                    }
-                }
-                
                 return PurePointRenderEngine.renderState(
-                    for: allVisiblePoints,
+                    using: index,
+                    lookup: lookup,
+                    selectedIDs: selectedIDs,
                     region: region,
-                    padding: 0.2,
+                    padding: 0.15,
                     limit: 1500,
                     activationCount: 200,
                     wideSpanThreshold: 0.8

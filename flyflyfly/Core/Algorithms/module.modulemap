@@ -1,0 +1,5 @@
+module FastMotionEngineCore {
+    header "FastMotionEngine.hpp"
+    export *
+    requires cplusplus
+}

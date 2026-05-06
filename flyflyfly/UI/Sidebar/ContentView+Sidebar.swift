@@ -268,7 +268,7 @@ extension ContentView {
             overlayCount: purePointOverlays.count,
             importError: purePointImportError,
             renderNotice: purePointRenderNotice,
-            hasVisiblePoints: !visiblePurePoints.isEmpty,
+            hasVisiblePoints: !vm.purePointStore.renderedPurePoints.isEmpty,
             onImport: {
                 purePointImportError = nil
                 isImportingPurePointKML = true

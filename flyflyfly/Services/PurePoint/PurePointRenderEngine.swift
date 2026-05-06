@@ -3,51 +3,53 @@ import SwiftUI
 
 public struct PurePointRenderEngine {
     static func renderState(
-        for entries: [VisiblePurePoint],
+        using index: FastMotionEngineWrapper,
+        lookup: [VisiblePurePoint],
+        selectedIDs: Set<String>,
         region: MKCoordinateRegion,
         padding: Double,
         limit: Int,
         activationCount: Int,
         wideSpanThreshold: Double
     ) -> PurePointRenderState {
-        let validEntries = entries.filter {
-            let coordinate = $0.point.coordinate
-            return CLLocationCoordinate2DIsValid(coordinate) && coordinate.latitude.isFinite && coordinate.longitude.isFinite
+        guard !lookup.isEmpty else { return .empty }
+
+        let latPadding = region.span.latitudeDelta * padding
+        let lonPadding = region.span.longitudeDelta * padding
+        let minLat = region.center.latitude - (region.span.latitudeDelta / 2) - latPadding
+        let maxLat = region.center.latitude + (region.span.latitudeDelta / 2) + latPadding
+        let minLon = region.center.longitude - (region.span.longitudeDelta / 2) - lonPadding
+        let maxLon = region.center.longitude + (region.span.longitudeDelta / 2) + lonPadding
+
+        // 1. $O(\log N)$ Spatial Search using C++ Quadtree
+        let foundIndices = index.searchPoints(inRectMinLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon)
+        
+        // 2. Map indices back to objects and filter by selected overlay IDs
+        var viewportEntries: [VisiblePurePoint] = []
+        viewportEntries.reserveCapacity(foundIndices.count)
+        
+        for idx in foundIndices {
+            let i = idx.intValue
+            if i < lookup.count {
+                let entry = lookup[i]
+                if selectedIDs.contains(entry.overlay.id) {
+                    viewportEntries.append(entry)
+                }
+            }
         }
-        guard !validEntries.isEmpty else { return .empty }
 
-        let regionNorm = region
-        let viewportFilteringNeeded = shouldViewportFilter(count: validEntries.count, region: regionNorm, activationCount: activationCount, wideSpanThreshold: wideSpanThreshold)
-        let viewportEntries = viewportFilteringNeeded
-            ? validEntries.filter { contains($0.point.coordinate, in: regionNorm, paddingFactor: padding) }
-            : validEntries
-
-        let rendered = cappedEntries(viewportEntries, limit: limit, region: regionNorm)
+        let rendered = cappedEntries(viewportEntries, limit: limit, region: region)
+        
         return PurePointRenderState(
             points: rendered,
-            totalMatchingCount: validEntries.count,
+            totalMatchingCount: lookup.count,
             viewportMatchingCount: viewportEntries.count,
-            isViewportFiltered: viewportFilteringNeeded,
+            isViewportFiltered: true,
             isDensityLimited: viewportEntries.count > rendered.count
         )
     }
 
-    // MARK: - Helpers moved from ContentView.swift
-    static func shouldViewportFilter(count: Int, region: MKCoordinateRegion, activationCount: Int, wideSpanThreshold: Double) -> Bool {
-        count > activationCount || region.span.latitudeDelta > wideSpanThreshold || region.span.longitudeDelta > wideSpanThreshold
-    }
-
-    static func contains(_ coordinate: CLLocationCoordinate2D, in region: MKCoordinateRegion, paddingFactor: Double = 0) -> Bool {
-        guard CLLocationCoordinate2DIsValid(coordinate), coordinate.latitude.isFinite, coordinate.longitude.isFinite else { return false }
-        let latPadding = region.span.latitudeDelta * paddingFactor
-        let lonPadding = region.span.longitudeDelta * paddingFactor
-        let minLat = region.center.latitude - (region.span.latitudeDelta / 2) - latPadding
-        let maxLat = region.center.latitude + (region.span.latitudeDelta / 2) + latPadding
-        let minLon = region.center.longitude - (region.span.longitudeDelta / 2) - lonPadding
-        let maxLon = region.center.longitude + (region.span.longitudeDelta * 0.5) + lonPadding
-        return coordinate.latitude >= minLat && coordinate.latitude <= maxLat && coordinate.longitude >= minLon && coordinate.longitude <= maxLon
-    }
-
+    // MARK: - Density Capping logic (Remains similar to before)
     static func cappedEntries(_ entries: [VisiblePurePoint], limit: Int, region: MKCoordinateRegion) -> [VisiblePurePoint] {
         guard entries.count > limit else { return entries }
         let latSpan = max(region.span.latitudeDelta, AppConstants.Map.minimumSpanDelta)
