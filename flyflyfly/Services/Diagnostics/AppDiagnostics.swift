@@ -119,9 +119,8 @@ final class AppDiagnostics: ObservableObject, DiagnosticsProviding {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.markCleanShutdown(reason: "willTerminate")
+        ) { _ in
+            AppDiagnostics.shared.markCleanShutdown(reason: "willTerminate")
         }
     }
 

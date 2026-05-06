@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import Foundation
 import CoreLocation
 
 enum FavoriteType: String, Codable {

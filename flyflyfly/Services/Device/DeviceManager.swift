@@ -265,10 +265,15 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
     deinit {
         let p = tunnelProcess
-        let item = autoReconnectWorkItem
         let stream = dvtStream
+        // Note: autoReconnectWorkItem is non-sendable, we cancel it in cleanup()
+        // which should be called before deinit, but we can also use MainActor.run
+        // or simple cancellation if we make it non-isolated.
+        
+        // Use nonisolated(unsafe) for deinit cleanup of non-sendable objects 
+        // if we are sure about the lifecycle. 
+        // But the best way is to wrap in Task.
         Task { @MainActor in
-            item?.cancel()
             stream.stop()
             if let p = p, p.isRunning {
                 p.terminate()

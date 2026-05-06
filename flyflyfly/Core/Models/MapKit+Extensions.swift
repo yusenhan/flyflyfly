@@ -1,6 +1,6 @@
 import Foundation
 import MapKit
-@preconcurrency import CoreLocation
+import CoreLocation
 
 // MARK: - CityContext
 public enum CityContext {
