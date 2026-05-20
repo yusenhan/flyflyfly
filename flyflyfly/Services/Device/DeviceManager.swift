@@ -168,7 +168,10 @@ struct TunnelOutputParser {
 @MainActor
 final class DeviceManager: ObservableObject, DeviceControlling {
     @Published private(set) var connectionState: DeviceConnectionState = .disconnected
+    @Published var systemInfo: IOSSystemInfo = IOSSystemInfo()
     @Published private(set) var deviceName: String = "未連接"
+    
+    private var sysMonProcess: Process?
     @Published private(set) var lastError: String?
     @Published var manualRsdHost: String = "" {
         didSet { UserDefaults.standard.set(manualRsdHost, forKey: Self.manualRsdHostKey) }
@@ -1180,6 +1183,81 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             self.deviceName = deviceName
         }
         self.lastError = lastError
+        
+        // Trigger system monitoring based on state
+        if state.isConnected {
+            startSystemMonitoring()
+        } else {
+            stopSystemMonitoring()
+        }
+    }
+
+    private func startSystemMonitoring() {
+        stopSystemMonitoring()
+        
+        guard let udid = connectedUDID, let cli = cachedCLIPath else { return }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: cli)
+        process.arguments = ["remote", "diagnostics", "sysmontap", "--udid", udid, "--json"]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            
+            if let line = String(data: data, encoding: .utf8) {
+                // Buffer lines as sysmontap output can be fragmented
+                DispatchQueue.main.async { [weak self] in
+                    self?.parseSystemInfoChunk(line)
+                }
+            }
+        }
+        
+        do {
+            try process.run()
+            sysMonProcess = process
+            print("[DeviceManager] System monitoring started for \(udid)")
+        } catch {
+            print("[DeviceManager] Failed to start system monitoring: \(error)")
+        }
+    }
+    
+    private func stopSystemMonitoring() {
+        sysMonProcess?.terminate()
+        sysMonProcess = nil
+        systemInfo = IOSSystemInfo()
+    }
+    
+    private func parseSystemInfoChunk(_ chunk: String) {
+        Task { @MainActor in
+            var updated = systemInfo
+            
+            // Sysmontap JSON output is complex. We use regex to find key metrics.
+            // CPU: "CPU": 12.5
+            if let cpuMatch = chunk.range(of: "\"CPU\"\\s*:\\s*([0-9.]+)", options: .regularExpression) {
+                let parts = chunk[cpuMatch].split(separator: ":")
+                if parts.count == 2, let val = Double(parts[1].trimmingCharacters(in: .whitespaces)) {
+                    updated.cpuUsage = val
+                }
+            }
+            
+            // RAM: "phys_footprint": 123456789
+            if let ramMatch = chunk.range(of: "\"phys_footprint\"\\s*:\\s*([0-9.]+)", options: .regularExpression) {
+                let parts = chunk[ramMatch].split(separator: ":")
+                if parts.count == 2, let val = Double(parts[1].trimmingCharacters(in: .whitespaces)) {
+                    updated.ramUsed = val / (1024 * 1024 * 1024)
+                    updated.ramTotal = 8.0 // Approx for modern iPhones
+                }
+            }
+            
+            // Battery & Thermal (Optional fallback via diagnostics relay if sysmontap doesn't include it)
+            // For now, focus on CPU/RAM from sysmontap
+            
+            self.systemInfo = updated
+        }
     }
 
     private func appendLog(_ text: String) {

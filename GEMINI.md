@@ -1,6 +1,7 @@
 # GEMINI.md (中文版)
 
 旨在減少常見 LLM 編程錯誤的行為準則。根據需要與項目特定指令合併。
+Are you 100% confident in this strategy? If not, find all possible loopholes, suggest proper fixes and run this loop until you are factually 100% confident in the new strategy.
 
 **權衡：** 這些準則偏向於謹慎而非速度。對於瑣碎的任務，請自行判斷。
 

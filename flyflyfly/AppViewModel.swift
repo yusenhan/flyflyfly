@@ -549,6 +549,12 @@ final class AppViewModel: ObservableObject {
             return
         }
         
+        // Multi-point confirmation logic
+        if operationMode == .multiPoint && appState == .selectingA && waypoints.count >= 2 {
+            calculateMultiPointRoute()
+            return
+        }
+        
         if shouldUseDraftControls {
             if hasActiveRouteSnapshot && hasReadyDraft {
                 isShowingRouteReplacementConfirmation = true

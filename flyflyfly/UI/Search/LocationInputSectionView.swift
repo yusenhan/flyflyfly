@@ -18,6 +18,46 @@ struct LocationInputSectionView: View {
 
             SearchBar(placeKeyword: $searchViewModel.placeKeyword, onSearch: { searchViewModel.searchPlaces(currentRegion: currentRegion) })
 
+            // 智慧剪貼簿座標偵測膠囊
+            if let clipCoord = searchViewModel.detectedClipboardCoordinate {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        searchViewModel.loadFromClipboard()
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.clipboard.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        
+                        Text("偵測到剪貼簿座標：\(clipCoord)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Text("一鍵定位")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(ModernTheme.accent)
+                            .foregroundColor(.white)
+                            .cornerRadius(6)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(ModernTheme.accent.opacity(0.12))
+                    .foregroundColor(ModernTheme.accent)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(ModernTheme.accent.opacity(0.25), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.vertical, 2)
+            }
+
             if let completerError = vm.locationSearchService.completerError {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -96,20 +136,6 @@ struct LocationInputSectionView: View {
                 .cornerRadius(6)
             }
 
-            HStack(spacing: 6) {
-                TextField(
-                    "",
-                    text: $searchViewModel.coordinateInputText,
-                    prompt: Text("請輸入：35.6621161,139.6986385").foregroundColor(.secondary)
-                )
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { searchViewModel.insertCoordinateFromInput() }
-                Button("確認") { searchViewModel.insertCoordinateFromInput() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ModernTheme.accent)
-                    .controlSize(.small)
-            }
-
             if let err = searchViewModel.locationInputError, !err.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -136,6 +162,12 @@ struct LocationInputSectionView: View {
                 }
                 .padding(.top, 4)
             }
+        }
+        .onAppear {
+            searchViewModel.checkClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            searchViewModel.checkClipboard()
         }
     }
 }

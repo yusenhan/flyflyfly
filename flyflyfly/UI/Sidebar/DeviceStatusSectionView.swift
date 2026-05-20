@@ -54,6 +54,11 @@ struct DeviceStatusSectionView: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
 
+            if vm.deviceManager.isConnected {
+                systemMonitorPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             // Transport Switcher
             Picker("連線模式", selection: $isWirelessMode) {
                 Text("USB").tag(false)
@@ -100,6 +105,52 @@ struct DeviceStatusSectionView: View {
                 }
             }
 
+        }
+    }
+
+    private var systemMonitorPanel: some View {
+        VStack(spacing: 8) {
+            let info = vm.deviceManager.systemInfo
+            
+            // CPU Row
+            resourceRow(
+                label: "CPU",
+                value: String(format: "%.1f%%", info.cpuUsage),
+                percent: info.cpuUsage / 100.0,
+                color: .blue
+            )
+            
+            // RAM Row
+            resourceRow(
+                label: "RAM",
+                value: String(format: "%.1f GB", info.ramUsed),
+                percent: info.ramPercentage / 100.0,
+                color: .purple
+            )
+        }
+        .padding(8)
+        .background(Color.primary.opacity(0.03))
+        .cornerRadius(6)
+    }
+    
+    private func resourceRow(label: String, value: String, percent: Double, color: Color) -> some View {
+        VStack(spacing: 2) {
+            HStack {
+                Text(label).font(.system(size: 10, weight: .bold))
+                Spacer()
+                Text(value).font(.system(size: 10, design: .monospaced))
+            }
+            .foregroundColor(.secondary)
+            
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.05))
+                    Capsule()
+                        .fill(color.opacity(0.7))
+                        .frame(width: geo.size.width * CGFloat(min(max(percent, 0), 1)))
+                }
+            }
+            .frame(height: 4)
         }
     }
 

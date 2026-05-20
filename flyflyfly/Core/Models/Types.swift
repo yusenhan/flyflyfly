@@ -82,4 +82,18 @@ enum DeviceConnectionState: Equatable {
     }
 }
 
+public struct IOSSystemInfo: Codable, Equatable {
+    public var cpuUsage: Double = 0.0      // 0.0 - 100.0
+    public var ramUsed: Double = 0.0       // GB
+    public var ramTotal: Double = 0.0      // GB
+    public var batteryLevel: Int = 0       // 0 - 100
+    public var isCharging: Bool = false
+    public var thermalState: String = "正常" // 正常, 溫暖, 嚴重, 危險
+    
+    public var ramPercentage: Double {
+        guard ramTotal > 0 else { return 0 }
+        return (ramUsed / ramTotal) * 100.0
+    }
+}
+
 

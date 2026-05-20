@@ -5,6 +5,7 @@ import Combine
 @MainActor
 protocol DeviceControlling: AnyObject {
     var connectionState: DeviceConnectionState { get }
+    var systemInfo: IOSSystemInfo { get }
     var logEntries: [String] { get }
     var lastSentCoordinate: CLLocationCoordinate2D? { get }
 
