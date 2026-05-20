@@ -37,8 +37,18 @@ English Version: [English README](./README.en.md)
 *   **📐 垂直摺疊控制面板**：取代舊式 Tab 切換，採用分段摺疊設計，消除分頁切換延遲，操作更直觀。
 *   **⚡ 側邊欄零延遲體驗**：透過 UI 架構優化與 C++ 運算核心隔離，確保介面反應毫秒級同步。
 *   **🔌 直覺連線管理**：連線按鈕整合至裝置狀態行，一鍵點擊即可完成手機與 Mac 的通訊連結。
-*   **📦 速度精確控制**：移除冗餘的拖拉 Bar，改用 TextField 與 Stepper 組合，提供更專業、穩定的速度設定。
 
+---
+
+## 🚦 真實防作弊與一鍵排障自癒 (NEW)
+
+專案最新引入了兩大突破性模組，將 GPS 模擬的防作弊安全性與裝置連線的自癒能力拉升至全新高度：
+
+*   **🚦 真實隨機漫步漂移 (Jitter Spoofer)**：實作平滑連續的「隨機漫步 (Random Walk)」物理運動模型。模擬位置在定點定位、行進中與紅綠燈停等時皆會以 `[-0.25m, 0.25m]` 步長進行微幅呼吸式晃動（約束於 `[0.5m ~ 5.0m]` 自訂半徑），完美防禦第三方 App 與遊戲的靜態定位偵測。
+*   **🚦 隨機紅綠燈模擬 (Simulated Traffic Lights)**：路線行進時每行駛 `[300m ~ 800m]` 隨機遇紅燈停等 `[15 ~ 45]` 秒。停等時距離停止累加，但持續發送防作弊隨機漂移點位，並於 Sidebar 與狀態列同步顯示精緻的 **紅綠燈倒數計時 HUD**。
+*   **🔌 連線故障疑難排障指引**：當發生連線故障時，自動滑出高質感四大檢修步驟卡片，包含螢幕解鎖信任、開發者模式啟動指引、拔插檢查等手動排障說明。
+*   **🛠️ 一鍵修復環境依賴 (One-Click Environment Repair)**：一鍵在背景啟動自動化修復腳本，重置 macOS 本地 USBMuxd 系統服務（修復 90% USB 連線卡死與設備識別錯誤）、重設 `bundled/` 目錄二進位檔可執行權限、強制結束卡死進程並自動升級 `pymobiledevice3` 套件。
+*   **📺 實時滾動毛玻璃日誌主控台**：修復過程中，會拉起高質感的 `.ultraThinMaterial` 毛玻璃面板，即時以滾動終端日誌展示修復每一步的 stdout/stderr 進度，掌控感十足。
 
 ---
 
@@ -48,30 +58,44 @@ English Version: [English README](./README.en.md)
 graph TD
     %% 角色定義
     subgraph UI_Layer [SwiftUI 介面層]
-        A[ContentView / Sidebar] -->|1. 選擇連線| B(AppViewModel)
-        A -->|4. 設定座標| B
+        A[ContentView / Workflow Tabs] -->|1. 選擇連線| B(AppViewModel)
+        A -->|4. 設定座標與真實模擬參數| B
         A -->|6. 開始移動| B
+        Z[🚦 紅綠燈倒計時 HUD] <-->|即時狀態同步| B
+        Y[🛠️ 毛玻璃修復日誌面板] <-->|實時滾動日誌| B
     end
 
-    subgraph Logic_Layer [C++ 效能引擎層]
+    subgraph Logic_Layer [C++ & Swift 效能與模擬引擎]
         B -->|2. 要求連線| C{DeviceManager}
+        B -->|5. 軌跡運算| J[C++ FastMotionEngine]
+        J -->|O log N 檢索| K[座標插值串流]
         
-        subgraph Connection_Process [RSD 隧道建立]
+        %% 防作弊模擬
+        K -->|真實模擬| P{隨機漫步 & 紅綠燈判定}
+        P -->|是: 觸發紅燈| PA[紅綠燈停等計時器]
+        PA -->|通知| Z
+        P -->|平滑微調| PB[隨機漫步 Jitter 運算]
+        
+        subgraph Connection_Process [RSD 隧道與故障排除]
             C -->|偵測裝置| D[USBMuxD / mDNS]
             D -->|呼叫| G[bundled/pymobiledevice3]
             G -->|要求權限| H[macOS 密碼提示]
             H -->|成功| I[實體 RSD 通道建立]
+            
+            %% 一鍵自癒
+            C -->|連線異常| Q[🔌 連線故障排障指引]
+            Q -->|一鍵修復| R[scripts/repair-environment.sh]
+            R -->|1. 重置 USBMuxd 轉發<br>2. 清除進程殘留<br>3. 授予 execution 權限| Y
+            R -->|修復成功| C
         end
-
-        B -->|5. 軌跡運算| J[C++ FastMotionEngine]
-        J -->|O log N 檢索| K[座標插值串流]
     end
 
     subgraph Native_Service [原生注入服務]
         I -->|3. 通道就緒| B
         B -->|7. 啟動原生流| L[DVTLocationStream]
         L -->|C++ Socket| M[原生通訊隧道]
-        K -->|零拷貝推送| M
+        PB -->|零拷貝推送| M
+        PA -->|停等時持續漂移| M
     end
 
     subgraph iOS_Device [iOS 裝置端]
