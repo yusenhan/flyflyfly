@@ -188,6 +188,8 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }
     @Published private(set) var debugLog: [String] = []
     @Published var developerModeDisabled: Bool = false
+    @Published var isRepairing: Bool = false
+    @Published var repairLogs: [String] = []
 
     var isConnected: Bool { connectionState.isConnected }
     var isConnecting: Bool { connectionState.isBusy }
@@ -1440,5 +1442,97 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    func repairEnvironment() async {
+        guard !isRepairing else { return }
+        isRepairing = true
+        repairLogs = []
+        appendRepairLog("[START] 開始執行一鍵修復環境...")
+        
+        let scriptPath: String
+        if let resourcesURL = Bundle.main.resourceURL {
+            scriptPath = resourcesURL.appendingPathComponent("repair-environment.sh").path
+        } else {
+            scriptPath = "./scripts/repair-environment.sh"
+        }
+        
+        let fileManager = FileManager.default
+        let resolvedPath: String
+        if fileManager.fileExists(atPath: scriptPath) {
+            resolvedPath = scriptPath
+        } else {
+            let fallbackPath = "/Users/yusenhan/Code/flyflyfly/scripts/repair-environment.sh"
+            if fileManager.fileExists(atPath: fallbackPath) {
+                resolvedPath = fallbackPath
+            } else {
+                appendRepairLog("[ERROR] 找不到修復腳本：\(scriptPath)")
+                isRepairing = false
+                return
+            }
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [resolvedPath]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        let fileHandle = pipe.fileHandleForReading
+        fileHandle.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            if let line = String(data: data, encoding: .utf8) {
+                let lines = line.components(separatedBy: .newlines)
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    for l in lines {
+                        let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            self.appendRepairLog(trimmed)
+                        }
+                    }
+                }
+            }
+        }
+        
+        do {
+            try process.run()
+            
+            while process.isRunning {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            
+            fileHandle.readabilityHandler = nil
+            if let lastData = try? fileHandle.readToEnd(), !lastData.isEmpty {
+                if let line = String(data: lastData, encoding: .utf8) {
+                    let lines = line.components(separatedBy: .newlines)
+                    for l in lines {
+                        let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            self.appendRepairLog(trimmed)
+                        }
+                    }
+                }
+            }
+            
+            let status = process.terminationStatus
+            if status == 0 {
+                appendRepairLog("[SUCCESS] 修復已順利完成！")
+            } else {
+                appendRepairLog("[ERROR] 修復腳本執行出錯，結束代碼：\(status)")
+            }
+        } catch {
+            appendRepairLog("[ERROR] 無法執行修復腳本：\(error.localizedDescription)")
+        }
+        
+        isRepairing = false
+    }
+    
+    private func appendRepairLog(_ text: String) {
+        repairLogs.append(text)
+        self.appendLog("[修復環境] \(text)")
     }
 }

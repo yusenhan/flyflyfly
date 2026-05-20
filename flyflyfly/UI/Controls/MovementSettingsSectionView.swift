@@ -79,6 +79,44 @@ struct MovementSettingsSectionView: View {
                     .tint(ModernTheme.accent)
                     .disabled(vm.appState != .selectingA && vm.appState != .readyToMove)
             }
+            
+            Divider().padding(.vertical, 4)
+            
+            VStack(alignment: .leading, spacing: 10) {
+                Text("真實防作弊模擬 (iOS 安全防護)").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("真實隨機漂移", isOn: $vm.isJitterEnabled)
+                        .tint(.green)
+                    
+                    if vm.isJitterEnabled {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text("漂移半徑限制:")
+                                Spacer()
+                                Text(String(format: "%.1f 公尺", vm.jitterRangeMeters))
+                                    .fontWeight(.bold)
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            
+                            Slider(value: $vm.jitterRangeMeters, in: 0.5...5.0, step: 0.1)
+                                .tint(.green)
+                        }
+                        .padding(.leading, 12)
+                        .transition(.slide.combined(with: .opacity))
+                    }
+                }
+                
+                if vm.operationMode != .fixedPoint {
+                    Toggle("模擬紅綠燈停等", isOn: $vm.isTrafficLightEnabled)
+                        .tint(.red)
+                }
+            }
+            .padding(10)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+            .cornerRadius(8)
+            .animation(.spring(), value: vm.isJitterEnabled)
 
         }
     }

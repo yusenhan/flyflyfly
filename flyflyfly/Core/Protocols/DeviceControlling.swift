@@ -21,7 +21,10 @@ protocol DeviceControlling: AnyObject {
     var isWirelessMode: Bool { get set }
     var developerModeDisabled: Bool { get }
     var objectWillChange: ObservableObjectPublisher { get }
+    var isRepairing: Bool { get }
+    var repairLogs: [String] { get }
 
+    func repairEnvironment() async
     func connect()
     func resolveCLI() throws -> [String]
     func connectDevice()

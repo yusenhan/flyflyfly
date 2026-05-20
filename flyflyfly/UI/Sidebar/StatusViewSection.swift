@@ -46,7 +46,29 @@ struct StatusViewSection: View {
                 Text(vm.hasActiveRouteSnapshot ? "黃色草稿已完成，可開始新路線" : "準備就緒")
                     .foregroundColor(vm.hasActiveRouteSnapshot ? .yellow : ModernTheme.info)
             case .moving:
-                Text("移動中...").foregroundColor(ModernTheme.info)
+                if vm.isTrafficLightEnabled && vm.isWaitingForTrafficLight {
+                    HStack(spacing: 10) {
+                        Image(systemName: "traffic.light.fill")
+                            .font(.title3)
+                            .foregroundColor(.red)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("紅綠燈停等中 (防作弊)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("剩餘時間: \(vm.trafficLightRemainingSeconds) 秒")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.red.opacity(0.12))
+                    .cornerRadius(8)
+                    .transition(.slide.combined(with: .opacity))
+                } else {
+                    Text("移動中...").foregroundColor(ModernTheme.info)
+                }
             }
         }
         .font(.headline)

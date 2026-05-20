@@ -76,12 +76,87 @@ struct DeviceStatusSectionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(6)
-            } else if !vm.deviceManager.isConnected {
-                Text(isWirelessMode
-                     ? "確保 iPhone 與 Mac 在同一個 Wi‑Fi 網路，按下上方工具列的連線按鈕。"
-                     : "插上手機並解鎖，按下上方工具列的連線按鈕即可。")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+            }
+
+            if !vm.deviceManager.isConnected {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("🔌 連線故障排障指引", systemImage: "questionmark.key.fill")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(ModernTheme.accent)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        troubleStepRow(step: "1", text: "請確認解鎖 iPhone 螢幕，並在彈窗點選「信任此電腦」")
+                        troubleStepRow(step: "2", text: "請確保已在 iPhone「設定 > 隱私權與安全性」最下方開啟「開發者模式」並重啟")
+                        troubleStepRow(step: "3", text: "如拔插傳輸線仍無效，可一鍵重置 macOS 本地 USBMuxd 系統服務")
+                        troubleStepRow(step: "4", text: "若發生依賴缺失或權限錯誤，可執行下方「一鍵修復環境」")
+                    }
+                }
+                .padding(8)
+                .background(Color.primary.opacity(0.02))
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.05), lineWidth: 1))
+                
+                // 一鍵修復按鈕
+                VStack(alignment: .leading, spacing: 8) {
+                    if vm.isRepairing {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在自動修復系統依賴...")
+                                    .font(.caption.bold())
+                                    .foregroundColor(ModernTheme.accent)
+                                Spacer()
+                            }
+                            
+                            // 滾動日誌毛玻璃面板
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("修復進度與日誌:")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        ForEach(vm.repairLogs, id: \.self) { log in
+                                            Text(log)
+                                                .font(.system(size: 9, design: .monospaced))
+                                                .foregroundColor(.primary.opacity(0.8))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                    .padding(4)
+                                }
+                                .frame(height: 100)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(6)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color.primary.opacity(0.03))
+                        .cornerRadius(8)
+                    } else {
+                        Button(action: {
+                            Task {
+                                await vm.repairEnvironment()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "wrench.and.screwdriver.fill")
+                                Text("一鍵修復環境依賴")
+                                    .fontWeight(.bold)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.orange)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .help("點擊自動給予二進制檔執行權限、清理背景進程並重啟 usbmuxd 轉發服務")
+                    }
+                }
+                .padding(.top, 4)
             }
 
             if !vm.deviceManager.debugLog.isEmpty && !vm.isActiveSimulationRunning {
@@ -151,6 +226,24 @@ struct DeviceStatusSectionView: View {
                 }
             }
             .frame(height: 4)
+        }
+    }
+
+    private func troubleStepRow(step: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(step)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 14, height: 14)
+                .background(ModernTheme.accent.opacity(0.8))
+                .clipShape(Circle())
+                .padding(.top, 1)
+            
+            Text(text)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

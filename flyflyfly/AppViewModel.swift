@@ -178,6 +178,26 @@ final class AppViewModel: ObservableObject {
         get { simulationStore.isClosedLoop }
         set { simulationStore.isClosedLoop = newValue }
     }
+    var isJitterEnabled: Bool {
+        get { simulationStore.isJitterEnabled }
+        set { simulationStore.isJitterEnabled = newValue }
+    }
+    var jitterRangeMeters: Double {
+        get { simulationStore.jitterRangeMeters }
+        set { simulationStore.jitterRangeMeters = newValue }
+    }
+    var isTrafficLightEnabled: Bool {
+        get { simulationStore.isTrafficLightEnabled }
+        set { simulationStore.isTrafficLightEnabled = newValue }
+    }
+    var isWaitingForTrafficLight: Bool {
+        get { simulationStore.isWaitingForTrafficLight }
+        set { simulationStore.isWaitingForTrafficLight = newValue }
+    }
+    var trafficLightRemainingSeconds: Int {
+        get { simulationStore.trafficLightRemainingSeconds }
+        set { simulationStore.trafficLightRemainingSeconds = newValue }
+    }
 
     // MARK: - Location input (Delegated)
 
@@ -226,6 +246,11 @@ final class AppViewModel: ObservableObject {
     var connectionStage: String { deviceStore.connectionStage }
     var deviceName: String { deviceStore.deviceName }
     var lastError: String? { deviceStore.lastError }
+    var isRepairing: Bool { deviceManager.isRepairing }
+    var repairLogs: [String] { deviceManager.repairLogs }
+    func repairEnvironment() async {
+        await deviceManager.repairEnvironment()
+    }
     var manualRsdHost: String {
         get { deviceManager.manualRsdHost }
         set { deviceManager.manualRsdHost = newValue }
