@@ -47,6 +47,7 @@ final class AppViewModel: ObservableObject {
     let purePointStore: PurePointStore
     let favoriteStore: FavoriteStore
     let searchViewModel: SearchViewModel
+    @Published var joystickStepSize: Double = 5.0
     
     // MARK: - Dependencies
     let deviceManager: any DeviceControlling
@@ -181,6 +182,10 @@ final class AppViewModel: ObservableObject {
     // MARK: - Location input (Delegated)
 
     // MARK: - Map camera (Delegated)
+    var mapType: MKMapType {
+        get { mapStateStore.mapType }
+        set { mapStateStore.mapType = newValue }
+    }
     var mapRegion: MKCoordinateRegion {
         get { mapStateStore.mapRegion }
         set { mapStateStore.mapRegion = newValue }
@@ -763,6 +768,68 @@ final class AppViewModel: ObservableObject {
     func cancelTempCoordinate() {
         tempCoordinate = nil
         appState = stateBeforeConfirm
+    }
+
+    func moveCoordinateStep(direction: String, distanceMeters: Double) {
+        var targetCoord: CLLocationCoordinate2D?
+        
+        if let temp = tempCoordinate {
+            targetCoord = temp
+        } else if appState == .moving, let current = currentPosition {
+            targetCoord = current
+        } else if let a = pointA, (appState == .selectingA || appState == .readyToMove) {
+            targetCoord = a
+        } else if let b = pointB, appState == .selectingB {
+            targetCoord = b
+        }
+        
+        guard let currentCoord = targetCoord else { return }
+        
+        // 1 degree latitude ~= 111,000 meters
+        let latChange = distanceMeters / 111000.0
+        // 1 degree longitude ~= 111,000 * cos(lat) meters
+        let latRadians = currentCoord.latitude * .pi / 180.0
+        let lonChange = distanceMeters / (111000.0 * cos(latRadians))
+        
+        var newLatitude = currentCoord.latitude
+        var newLongitude = currentCoord.longitude
+        
+        switch direction.lowercased() {
+        case "north", "up":
+            newLatitude += latChange
+        case "south", "down":
+            newLatitude -= latChange
+        case "east", "right":
+            newLongitude += lonChange
+        case "west", "left":
+            newLongitude -= lonChange
+        default:
+            break
+        }
+        
+        let newCoord = CLLocationCoordinate2D(latitude: newLatitude, longitude: newLongitude)
+        guard CLLocationCoordinate2DIsValid(newCoord) else { return }
+        
+        if tempCoordinate != nil {
+            tempCoordinate = newCoord
+            centerMap(on: newCoord)
+        } else if appState == .moving, currentPosition != nil {
+            currentPosition = newCoord
+            centerMap(on: newCoord)
+            if activeOperationMode == .fixedPoint {
+                simulationStore.startPinnedLocationKeepAlive(at: newCoord)
+                Task {
+                    try? await deviceManager.sendLocationToDeviceAsync(latitude: newCoord.latitude, longitude: newCoord.longitude)
+                }
+            }
+        } else if pointA != nil, (appState == .selectingA || appState == .readyToMove) {
+            pointA = newCoord
+            centerMap(on: newCoord)
+        } else if pointB != nil, appState == .selectingB {
+            pointB = newCoord
+            centerMap(on: newCoord)
+            calculateRoute()
+        }
     }
 
     func recalculateRoute() {

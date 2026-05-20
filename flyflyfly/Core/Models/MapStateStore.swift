@@ -22,6 +22,7 @@ final class MapStateStore: ObservableObject {
     @Published var draftTotalRouteDistance: Double = 0.0
 
     // MARK: - Map camera / view state
+    @Published var mapType: MKMapType = .standard
     @Published var mapRegion: MKCoordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: AppConstants.Map.defaultLatitude, longitude: AppConstants.Map.defaultLongitude),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)

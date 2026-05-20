@@ -133,11 +133,154 @@ struct ContentView: View {
     var mapPane: some View {
         GeometryReader { geometry in
             if geometry.size.width > 20, geometry.size.height > 20 {
-                LegacyMapView(vm: vm, renderedPurePoints: renderedPurePoints)
-                    .ignoresSafeArea()
+                ZStack(alignment: .top) {
+                    ZStack(alignment: .bottomTrailing) {
+                        ZStack(alignment: .topTrailing) {
+                            LegacyMapView(vm: vm, renderedPurePoints: renderedPurePoints)
+                                .ignoresSafeArea()
+                            
+                            // Map Style Picker
+                            Picker("", selection: Binding(
+                                get: { vm.mapType },
+                                set: { vm.mapType = $0 }
+                            )) {
+                                Text("標準").tag(MKMapType.standard)
+                                Text("衛星").tag(MKMapType.satellite)
+                                Text("混合").tag(MKMapType.hybrid)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 140)
+                            .padding(6)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(8)
+                            .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1.5)
+                            .padding(12)
+                        }
+                        
+                        // Floating Joystick Panel (bottom-right)
+                        joystickPanel
+                    }
+                    
+                    // Floating PurePoint HUD Bubble (top center)
+                    if let notice = purePointRenderNotice {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.orange)
+                            Text(notice)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
+                        .padding(.top, 12)
+                    }
+                }
             } else {
                 Color.clear
             }
         }
+    }
+
+    @ViewBuilder
+    private var joystickPanel: some View {
+        let hasActiveCoordinate = vm.tempCoordinate != nil || (vm.appState == .moving && vm.currentPosition != nil) || (vm.pointA != nil && (vm.appState == .selectingA || vm.appState == .readyToMove)) || (vm.pointB != nil && vm.appState == .selectingB)
+        
+        if hasActiveCoordinate {
+            VStack(spacing: 8) {
+                // Step Size Selector
+                HStack(spacing: 3) {
+                    Text("微調步長").font(.system(size: 9)).foregroundColor(.secondary)
+                    Spacer()
+                    ForEach([1.0, 2.0, 5.0, 10.0], id: \.self) { size in
+                        Button(action: { vm.joystickStepSize = size }) {
+                            Text("\(Int(size))m")
+                                .font(.system(size: 8, weight: vm.joystickStepSize == size ? .bold : .regular))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(vm.joystickStepSize == size ? ModernTheme.accent : Color.primary.opacity(0.05))
+                                .foregroundColor(vm.joystickStepSize == size ? .white : .primary)
+                                .cornerRadius(3)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 2)
+                
+                // D-Pad Grid
+                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                    GridRow {
+                        Color.clear.frame(width: 28, height: 28)
+                        
+                        // Up / North
+                        joystickButton(direction: "up", icon: "chevron.up")
+                        
+                        Color.clear.frame(width: 28, height: 28)
+                    }
+                    
+                    GridRow {
+                        // Left / West
+                        joystickButton(direction: "left", icon: "chevron.left")
+                        
+                        // Center icon/scope
+                        ZStack {
+                            Circle()
+                                .fill(ModernTheme.accent.opacity(0.12))
+                                .frame(width: 28, height: 28)
+                            Image(systemName: "scope")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(ModernTheme.accent)
+                        }
+                        
+                        // Right / East
+                        joystickButton(direction: "right", icon: "chevron.right")
+                    }
+                    
+                    GridRow {
+                        Color.clear.frame(width: 28, height: 28)
+                        
+                        // Down / South
+                        joystickButton(direction: "down", icon: "chevron.down")
+                        
+                        Color.clear.frame(width: 28, height: 28)
+                    }
+                }
+            }
+            .padding(8)
+            .background(.ultraThinMaterial)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+            )
+            .frame(width: 130)
+            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .padding([.bottom, .trailing], 12)
+        }
+    }
+
+    @ViewBuilder
+    private func joystickButton(direction: String, icon: String) -> some View {
+        Button(action: {
+            withAnimation(.interactiveSpring(response: 0.15, dampingFraction: 0.7)) {
+                vm.moveCoordinateStep(direction: direction, distanceMeters: vm.joystickStepSize)
+            }
+        }) {
+            ZStack {
+                Circle()
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 0.5)
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+            .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
     }
 }

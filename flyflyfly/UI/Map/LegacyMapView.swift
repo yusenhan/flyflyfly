@@ -52,6 +52,9 @@ struct LegacyMapView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MKMapView, context: Context) {
+        if nsView.mapType != vm.mapType {
+            nsView.mapType = vm.mapType
+        }
         updateOverlays(nsView)
         updateAnnotations(nsView)
         
