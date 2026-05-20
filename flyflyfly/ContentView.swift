@@ -23,8 +23,10 @@ struct ContentView: View {
     @State var pendingImportedOverlays: [PurePointOverlay] = []
     @State var pendingImportedOverlayTitles: [String: String] = [:]
     @State var isShowingImportedOverlayNamingSheet: Bool = false
+    @State var activeTab: WorkflowTab = .connect
     let routeColors: [Color] = [.yellow, .orange, .mint, .pink]
     private let purePointViewportPadding = AppConstants.PurePoint.viewportPadding
+
 
     init() {
         let defaults = UserDefaults.standard
@@ -284,3 +286,23 @@ struct ContentView: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Workflow Navigation Enum
+public enum WorkflowTab: String, CaseIterable, Identifiable {
+    case connect = "連線"
+    case locate = "定位"
+    case layers = "圖層"
+    case settings = "設定"
+    
+    public var id: String { self.rawValue }
+    
+    public var icon: String {
+        switch self {
+        case .connect: return "cable.connector"
+        case .locate: return "location.fill"
+        case .layers: return "square.3.layers.3d.down.forward"
+        case .settings: return "slider.horizontal.3"
+        }
+    }
+}
+

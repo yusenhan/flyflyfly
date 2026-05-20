@@ -178,49 +178,87 @@ extension ContentView {
     @ViewBuilder
     func sidebarSections(isCompactSidebar: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 頂部 Workflow Tab 導航列
+            HStack(spacing: 4) {
+                ForEach(WorkflowTab.allCases) { tab in
+                    Button(action: {
+                        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.85)) {
+                            activeTab = tab
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(tab.rawValue)
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(activeTab == tab ? ModernTheme.accent.opacity(0.15) : Color.clear)
+                        )
+                        .foregroundColor(activeTab == tab ? ModernTheme.accent : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(6)
+            .background(Color(nsColor: .windowBackgroundColor).opacity(0.4))
+            .background(.ultraThinMaterial)
+            .cornerRadius(10)
+            .padding(.horizontal, isCompactSidebar ? 10 : 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            Divider().opacity(0.5)
+
+            // 分頁滾動內容區
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    
-                    // Section 1: 模擬控制
-                    CollapsibleSection(title: "模擬控制", icon: "location.north.fill", defaultExpanded: true) {
+                VStack(alignment: .leading, spacing: 16) {
+                    switch activeTab {
+                    case .connect:
+                        VStack(alignment: .leading, spacing: 16) {
+                            deviceStatusSection(isCompactSidebar: isCompactSidebar)
+                        }
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .leading)), removal: .opacity))
+
+                    case .locate:
                         VStack(alignment: .leading, spacing: 16) {
                             operationModePicker
-                            deviceStatusSection(isCompactSidebar: isCompactSidebar)
+                            
                             locationInputSection
                             
-                            if vm.isActiveSimulationRunning || vm.appState == .moving {
-                                StatusViewSection(vm: vm, routeColors: routeColors)
-                                    .transition(.move(edge: .top).combined(with: .opacity))
-                            }
-                        }
-                        .padding(.bottom, 8)
-                    }
-                    
-                    Divider().opacity(0.5)
-
-                    // Section 2: 我的最愛與圖層
-                    CollapsibleSection(title: "資料與圖層", icon: "tray.full.fill", defaultExpanded: false) {
-                        VStack(alignment: .leading, spacing: 20) {
-                            Text("常用收藏").font(.subheadline.bold())
+                            Divider().opacity(0.3)
+                            
+                            Text("常用收藏")
+                                .font(.subheadline.bold())
+                                .foregroundColor(ModernTheme.label)
+                            
                             FavoritesSectionView(vm: vm)
+                        }
+                        .transition(.opacity)
+
+                    case .layers:
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("地圖圖層")
+                                .font(.subheadline.bold())
+                                .foregroundColor(ModernTheme.label)
                             
-                            Divider()
-                            
-                            Text("地圖圖層").font(.subheadline.bold())
                             purePointControlsSection(isCompactSidebar: isCompactSidebar)
                         }
-                        .padding(.bottom, 8)
-                    }
-                    
-                    Divider().opacity(0.5)
+                        .transition(.opacity)
 
-                    // Section 3: 參數設定
-                    CollapsibleSection(title: "配置設定", icon: "slider.horizontal.3", defaultExpanded: false) {
+                    case .settings:
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("移動參數").font(.subheadline.bold())
+                            Text("移動參數設定")
+                                .font(.subheadline.bold())
+                                .foregroundColor(ModernTheme.label)
+                            
                             MovementSettingsSectionView(vm: vm)
                         }
-                        .padding(.bottom, 8)
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .trailing)), removal: .opacity))
                     }
                 }
                 .padding(.horizontal, isCompactSidebar ? 10 : 16)
@@ -228,10 +266,20 @@ extension ContentView {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            // Fixed Footer
-            VStack(spacing: 12) {
+            // 固定底部常駐控制與監控區
+            VStack(spacing: 8) {
                 Divider()
+                
+                // 當正在模擬運行或處於與移動相關狀態時，動態展開顯示狀態通知
+                if vm.isActiveSimulationRunning || vm.appState == .moving || vm.appState == .calculatingRoute || vm.appState == .routeSelection {
+                    StatusViewSection(vm: vm, routeColors: routeColors)
+                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                
                 pinnedCoordinateSection
+                
                 sidebarFooter(isCompactSidebar: isCompactSidebar)
             }
             .padding(.horizontal, isCompactSidebar ? 10 : 16)
@@ -241,6 +289,7 @@ extension ContentView {
         }
         .frame(maxWidth: .infinity)
     }
+
 
     @ViewBuilder
     func sidebarFooter(isCompactSidebar: Bool) -> some View {
