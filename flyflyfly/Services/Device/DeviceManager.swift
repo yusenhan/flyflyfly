@@ -65,6 +65,26 @@ private final class LockedDataBuffer: @unchecked Sendable {
     }
 }
 
+// A thread-safe buffer for capturing logs
+private final class ThreadSafeLogBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffer: [String] = []
+
+    func append(_ text: String) {
+        lock.lock()
+        buffer.append(text)
+        lock.unlock()
+    }
+
+    func flush() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = buffer
+        buffer.removeAll()
+        return current
+    }
+}
+
 struct TunnelOutputParser {
     nonisolated static func endpoint(in text: String) -> (host: String, port: String)? {
         if let host = firstMatch(text, pattern: "RSD\\s+Address:\\s*([^\\s\\n\\r]+)"),
@@ -190,6 +210,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     @Published var developerModeDisabled: Bool = false
     @Published var isRepairing: Bool = false
     @Published var repairLogs: [String] = []
+    
+    private let repairLogBuffer = ThreadSafeLogBuffer()
+    private var repairTimer: AnyCancellable?
 
     var isConnected: Bool { connectionState.isConnected }
     var isConnecting: Bool { connectionState.isBusy }
@@ -1448,6 +1471,14 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         guard !isRepairing else { return }
         isRepairing = true
         repairLogs = []
+        
+        // 啟動 80ms 刷新定時器，將修復日誌批量寫入，避免高頻 UI 渲染造成卡頓
+        repairTimer = Timer.publish(every: 0.08, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.flushPendingRepairLogs()
+            }
+            
         appendRepairLog("[START] 開始執行一鍵修復環境...")
         
         let scriptPath: String
@@ -1467,6 +1498,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 resolvedPath = fallbackPath
             } else {
                 appendRepairLog("[ERROR] 找不到修復腳本：\(scriptPath)")
+                flushPendingRepairLogs()
+                repairTimer?.cancel()
+                repairTimer = nil
                 isRepairing = false
                 return
             }
@@ -1486,13 +1520,10 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             guard !data.isEmpty else { return }
             if let line = String(data: data, encoding: .utf8) {
                 let lines = line.components(separatedBy: .newlines)
-                Task { @MainActor [weak self] in
-                    guard let self = self else { return }
-                    for l in lines {
-                        let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            self.appendRepairLog(trimmed)
-                        }
+                for l in lines {
+                    let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        self?.appendRepairLog(trimmed)
                     }
                 }
             }
@@ -1528,11 +1559,54 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             appendRepairLog("[ERROR] 無法執行修復腳本：\(error.localizedDescription)")
         }
         
+        // 確保把剩餘的日誌都刷出來
+        flushPendingRepairLogs()
+        repairTimer?.cancel()
+        repairTimer = nil
         isRepairing = false
     }
     
-    private func appendRepairLog(_ text: String) {
-        repairLogs.append(text)
-        self.appendLog("[修復環境] \(text)")
+    nonisolated private func appendRepairLog(_ text: String) {
+        repairLogBuffer.append(text)
+    }
+    
+    @MainActor
+    private func flushPendingRepairLogs() {
+        let logsToFlush = repairLogBuffer.flush()
+        guard !logsToFlush.isEmpty else { return }
+        
+        // 批量寫入 repairLogs
+        self.repairLogs.append(contentsOf: logsToFlush)
+        
+        // 批量寫入 debugLog 並寫入文件以節省 I/O 與 UI 重繪開銷
+        let stamp = Self.logFormatter.string(from: Date())
+        var newDebugLines: [String] = []
+        var fileContent = ""
+        for text in logsToFlush {
+            let line = "[\(stamp)] [修復環境] \(text)"
+            newDebugLines.append(line)
+            fileContent += line + "\n"
+        }
+        
+        self.debugLog.append(contentsOf: newDebugLines)
+        if self.debugLog.count > 120 {
+            self.debugLog.removeFirst(self.debugLog.count - 120)
+        }
+        
+        // 將批量文件寫入丟到背景佇列，避免阻塞 UI
+        runtimeLogQueue.async { [runtimeLog, fileContent] in
+            guard let data = fileContent.data(using: .utf8) else { return }
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: runtimeLog) {
+                fm.createFile(atPath: runtimeLog, contents: data)
+                return
+            }
+            do {
+                let fh = try FileHandle(forWritingTo: URL(fileURLWithPath: runtimeLog))
+                try fh.seekToEnd()
+                try fh.write(contentsOf: data)
+                try fh.close()
+            } catch { }
+        }
     }
 }

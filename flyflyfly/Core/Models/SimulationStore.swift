@@ -38,9 +38,11 @@ final class SimulationStore: ObservableObject {
     @Published var lastSentPosition: CLLocationCoordinate2D?
     @Published var lastSentAt: Date?
     
-    // Drift (Random Walk) states
+    // Drift (Random Walk) states & caching
     private var currentJitterLatOffset: Double = 0.0
     private var currentJitterLonOffset: Double = 0.0
+    private var cachedCosLat: Double?
+    private var lastBaseLatForCos: Double?
     
     // Traffic light states
     private var nextTrafficLightDistance: Double = 0.0
@@ -142,11 +144,39 @@ final class SimulationStore: ObservableObject {
         isWaitingForTrafficLight = true
         trafficLightRemainingSeconds = Int.random(in: 15...45)
         
+        // Suspend the high-frequency moveTimer to save energy and CPU
+        moveTimer?.invalidate()
+        moveTimer = nil
+        
+        // Send initial location update with jitter when red light triggers
+        if let baseCoord = currentPosition {
+            let finalCoord = applyJitter(to: baseCoord)
+            Task {
+                try? await deviceManager.sendLocationToDeviceAsync(latitude: finalCoord.latitude, longitude: finalCoord.longitude)
+            }
+            lastSentPosition = finalCoord
+            lastSentAt = Date()
+        }
+        
         trafficLightTimer?.invalidate()
         trafficLightTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.trafficLightRemainingSeconds -= 1
+                
+                // Downsample location updates during red light (send only every 2 seconds)
+                if self.trafficLightRemainingSeconds % 2 == 0 {
+                    if let baseCoord = self.currentPosition {
+                        let finalCoord = self.applyJitter(to: baseCoord)
+                        try? await self.deviceManager.sendLocationToDeviceAsync(
+                            latitude: finalCoord.latitude,
+                            longitude: finalCoord.longitude
+                        )
+                        self.lastSentPosition = finalCoord
+                        self.lastSentAt = Date()
+                    }
+                }
+                
                 if self.trafficLightRemainingSeconds <= 0 {
                     self.stopTrafficLightWaiting()
                 }
@@ -160,12 +190,17 @@ final class SimulationStore: ObservableObject {
         isWaitingForTrafficLight = false
         // Set next trigger distance
         nextTrafficLightDistance = traveledDistance + Double.random(in: 300...800)
+        
+        // Resume simulation and recreate moveTimer
+        continueSimulation()
     }
     
     private func applyJitter(to coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
         guard isJitterEnabled else {
             currentJitterLatOffset = 0.0
             currentJitterLonOffset = 0.0
+            cachedCosLat = nil
+            lastBaseLatForCos = nil
             return coordinate
         }
         
@@ -176,8 +211,19 @@ final class SimulationStore: ObservableObject {
         
         // Meters to Lat/Lon degrees conversion
         let latDegreePerMeter = 1.0 / 111000.0
-        let latRad = coordinate.latitude * .pi / 180.0
-        let cosLat = cos(latRad) > 0.1 ? cos(latRad) : 1.0
+        
+        // Caching cosLat to save CPU on heavy trigonometry calculations
+        let cosLat: Double
+        if let lastLat = lastBaseLatForCos, let cached = cachedCosLat, abs(coordinate.latitude - lastLat) < 0.01 {
+            cosLat = cached
+        } else {
+            let latRad = coordinate.latitude * .pi / 180.0
+            let calculated = cos(latRad)
+            cosLat = calculated > 0.1 ? calculated : 1.0
+            cachedCosLat = cosLat
+            lastBaseLatForCos = coordinate.latitude
+        }
+        
         let lonDegreePerMeter = 1.0 / (111000.0 * cosLat)
         
         let dLat = dy * latDegreePerMeter
@@ -208,14 +254,8 @@ final class SimulationStore: ObservableObject {
     private func tickSimulation() async {
         guard isActiveSimulationRunning else { return }
         
-        // If waiting for traffic light, stay stationary but still send jitter location
+        // If waiting for traffic light, stay stationary (should be suspended, but serves as safeguard)
         if isTrafficLightEnabled && isWaitingForTrafficLight {
-            if let baseCoord = currentPosition {
-                let finalCoord = applyJitter(to: baseCoord)
-                try? await deviceManager.sendLocationToDeviceAsync(latitude: finalCoord.latitude, longitude: finalCoord.longitude)
-                lastSentPosition = finalCoord
-                lastSentAt = Date()
-            }
             return
         }
         
@@ -226,12 +266,6 @@ final class SimulationStore: ObservableObject {
         // Check if traffic light triggers
         if isTrafficLightEnabled && traveledDistance >= nextTrafficLightDistance {
             startTrafficLightWaiting()
-            if let baseCoord = currentPosition {
-                let finalCoord = applyJitter(to: baseCoord)
-                try? await deviceManager.sendLocationToDeviceAsync(latitude: finalCoord.latitude, longitude: finalCoord.longitude)
-                lastSentPosition = finalCoord
-                lastSentAt = Date()
-            }
             return
         }
         
