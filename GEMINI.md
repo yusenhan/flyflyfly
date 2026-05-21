@@ -64,3 +64,7 @@ Are you 100% confident in this strategy? If not, find all possible loopholes, su
 ---
 
 **如果出現以下情況，說明這些準則正在發揮作用：** Diff 中不必要的更改減少，因過度複雜化而導致的重寫減少，且澄清性問題出現在實施之前而非出錯之後。
+
+## 5. 項目特定準則
+
+- **同時建置**: 所有的 build 都必須同時建置 Debug 和 Release 兩個版本，以確保兩種配置下的代碼在兩種環境中均能正常編譯無誤。

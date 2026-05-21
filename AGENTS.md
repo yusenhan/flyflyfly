@@ -63,6 +63,8 @@ bundled/
 - **Architecture**: Decoupled into `Core`, `Services`, and `UI`. `ContentView` uses `@StateObject` for `AppViewModel`.
 - **Concurrency**: `@MainActor` on ViewModels. `DeviceManager` uses `DispatchQueue` and `NSLock` for thread safety.
 - **Process Management**: `Process` + `Pipe` for CLI tools.
+- **Builds**: 所有的建置（Builds）都必須同時編譯 Debug 與 Release 兩個版本，以確保兩種配置下的代碼均能正常編譯無誤。
+
 
 ## NOTES
 
