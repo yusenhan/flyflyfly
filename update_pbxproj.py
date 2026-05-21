@@ -79,7 +79,7 @@ def main():
     new_build_files = []
     new_build_file_ids = []
     for f in target_files:
-        if not f.endswith(('.cpp', '.mm')): continue 
+        if not f.endswith(('.cpp', '.mm', '.swift')): continue 
         name = os.path.basename(f)
         if name not in existing_build_file_names:
             file_id = name_to_id.get(name)

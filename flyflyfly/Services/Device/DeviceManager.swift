@@ -226,26 +226,6 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         let port: String
     }
 
-    private struct USBMuxDevice: Decodable, Sendable {
-        let connectionType: String?
-        let deviceClass: String?
-        let deviceName: String?
-        let identifier: String?
-        let uniqueDeviceID: String?
-        let productType: String?
-        let productVersion: String?
-
-        enum CodingKeys: String, CodingKey {
-            case connectionType = "ConnectionType"
-            case deviceClass = "DeviceClass"
-            case deviceName = "DeviceName"
-            case identifier = "Identifier"
-            case uniqueDeviceID = "UniqueDeviceID"
-            case productType = "ProductType"
-            case productVersion = "ProductVersion"
-        }
-    }
-
     private let sendQueue = DispatchQueue(label: "paperclip.gps.sender", qos: .utility)
     private var isConnectionInFlight = false
     private var inFlight = false
@@ -284,6 +264,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }()
 
     private var cachedCLIPath: String?
+    
+    private let usbmuxMonitor = USBMuxMonitor()
+    private var monitorCancellables = Set<AnyCancellable>()
 
     init() {
         let defaults = UserDefaults.standard
@@ -297,6 +280,13 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         isAutoConnectEnabled = defaults.bool(forKey: Self.autoConnectEnabledKey)
         
         // CLI path will be resolved lazily on first use
+        usbmuxMonitor.startMonitoring()
+        
+        usbmuxMonitor.$devices
+            .sink { [weak self] newDevices in
+                self?.handleMuxDevicesChanged(newDevices)
+            }
+            .store(in: &monitorCancellables)
     }
 
     deinit {
@@ -357,20 +347,15 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         guard isAutoConnectEnabled else { return }
         guard !isConnected && !isConnecting else { return }
         
-        Task {
-            do {
-                let cmd = try resolveCLI()
-                appendLog("啟動自動偵測：掃描已連線的 iOS 裝置...")
-                let devices = try await listConnectedDevices(using: cmd)
-                if !devices.isEmpty {
-                    appendLog("啟動自動偵測：偵測到 \(devices.count) 台 iOS 裝置，自動啟動連線流程")
-                    await connectDeviceInternal(autoTriggered: false, force: true)
-                } else {
-                    appendLog("啟動自動偵測：未偵測到任何連接的 iOS 裝置，跳過自動連線")
-                }
-            } catch {
-                appendLog("啟動自動偵測失敗：\(error.localizedDescription)")
+        appendLog("啟動自動偵測：掃描已連線的 iOS 裝置...")
+        let devices = usbmuxMonitor.devices
+        if !devices.isEmpty {
+            appendLog("啟動自動偵測：偵測到 \(devices.count) 台 iOS 裝置，自動啟動連線流程")
+            Task {
+                await connectDeviceInternal(autoTriggered: false, force: true)
             }
+        } else {
+            appendLog("啟動自動偵測：未偵測到任何連接的 iOS 裝置，跳過自動連線")
         }
     }
 
@@ -664,14 +649,36 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             || lower.contains("usbmux")
     }
 
+    private func handleMuxDevicesChanged(_ newDevices: [USBMuxDevice]) {
+        appendLog("偵測到 USBMux 裝置變更，當前連接數量：\(newDevices.count)")
+        
+        // 若當前處於連線或正在連線狀態，且我們連線的 UDID 已經不在 newDevices 列表中（即已被拔出）
+        if isConnected || isConnecting {
+            if let activeUDID = connectedUDID {
+                let stillConnected = newDevices.contains(where: { $0.identifier == activeUDID || $0.uniqueDeviceID == activeUDID })
+                if !stillConnected {
+                    appendLog("即插即連：偵測到當前連線的手機已被拔除，主動執行斷開連線...")
+                    disconnect()
+                    setConnectionState(.disconnected, deviceName: "未連接", lastError: "裝置已拔除")
+                    return
+                }
+            }
+        }
+        
+        // 若偵測到新設備插入，且當前未連線、未正在連線、且開啟了「自動偵測」
+        guard isAutoConnectEnabled else { return }
+        guard !isConnected && !isConnecting else { return }
+        
+        if !newDevices.isEmpty {
+            appendLog("即插即連：偵測到 iOS 裝置已接入，自動啟動連線流程...")
+            Task {
+                await connectDeviceInternal(autoTriggered: false, force: true)
+            }
+        }
+    }
+
     private func listConnectedDevices(using cmd: [String]) async throws -> [USBMuxDevice] {
-        let raw = try await runWithTimeoutLogged(
-            cmd + ["usbmux", "list"],
-            timeout: AppConstants.Timeouts.tunnelReady,
-            step: "偵測連線裝置"
-        )
-        guard let data = raw.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([USBMuxDevice].self, from: data)) ?? []
+        return self.usbmuxMonitor.devices
     }
 
     private func matchesDevice(_ device: USBMuxDevice, requestedUDID: String) -> Bool {
