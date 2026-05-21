@@ -246,6 +246,13 @@ final class AppViewModel: ObservableObject {
     var connectionStage: String { deviceStore.connectionStage }
     var deviceName: String { deviceStore.deviceName }
     var lastError: String? { deviceStore.lastError }
+    var isAutoConnectEnabled: Bool {
+        get { deviceStore.isAutoConnectEnabled }
+        set {
+            deviceStore.isAutoConnectEnabled = newValue
+            objectWillChange.send()
+        }
+    }
     var isRepairing: Bool { deviceManager.isRepairing }
     var repairLogs: [String] { deviceManager.repairLogs }
     func repairEnvironment() async {
@@ -308,6 +315,9 @@ final class AppViewModel: ObservableObject {
         // Pre-warm CLI path in background task to avoid lag on first use in Settings tab
         Task {
             _ = try? deviceManager.resolveCLI()
+            if deviceStore.isAutoConnectEnabled {
+                deviceStore.connectDeviceIfAvailable()
+            }
         }
     }
 

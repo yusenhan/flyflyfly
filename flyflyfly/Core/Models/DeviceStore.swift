@@ -29,8 +29,17 @@ final class DeviceStore: ObservableObject {
     var deviceName: String { deviceManager.deviceName }
     var lastError: String? { deviceManager.lastError }
     
+    var isAutoConnectEnabled: Bool {
+        get { deviceManager.isAutoConnectEnabled }
+        set { deviceManager.isAutoConnectEnabled = newValue }
+    }
+    
     func connect() {
         deviceManager.connectDevice()
+    }
+    
+    func connectDeviceIfAvailable() {
+        deviceManager.connectDeviceIfAvailable()
     }
     
     func disconnect() {

@@ -23,8 +23,10 @@ protocol DeviceControlling: AnyObject {
     var objectWillChange: ObservableObjectPublisher { get }
     var isRepairing: Bool { get }
     var repairLogs: [String] { get }
+    var isAutoConnectEnabled: Bool { get set }
 
     func repairEnvironment() async
+    func connectDeviceIfAvailable()
     func connect()
     func resolveCLI() throws -> [String]
     func connectDevice()

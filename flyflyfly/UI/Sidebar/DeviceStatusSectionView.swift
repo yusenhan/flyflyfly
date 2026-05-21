@@ -68,6 +68,21 @@ struct DeviceStatusSectionView: View {
             .labelsHidden()
             .disabled(vm.deviceManager.isConnecting)
 
+            // Auto-Connect Toggle
+            Toggle(isOn: $vm.isAutoConnectEnabled) {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.horizontal.circle.fill")
+                        .foregroundColor(vm.isAutoConnectEnabled ? .green : .secondary)
+                        .font(.system(size: 12))
+                    Text("啟動時自動偵測連線裝置")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .toggleStyle(.checkbox)
+            .disabled(vm.deviceManager.isConnecting)
+            .padding(.vertical, 2)
+
             if let err = vm.deviceManager.lastError, !err.isEmpty {
                 Label(err, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)

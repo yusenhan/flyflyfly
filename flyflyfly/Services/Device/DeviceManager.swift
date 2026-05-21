@@ -206,6 +206,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     @Published var isWirelessMode: Bool = false {
         didSet { UserDefaults.standard.set(isWirelessMode, forKey: Self.wirelessModeKey) }
     }
+    @Published var isAutoConnectEnabled: Bool = true {
+        didSet { UserDefaults.standard.set(isAutoConnectEnabled, forKey: Self.autoConnectEnabledKey) }
+    }
     @Published private(set) var debugLog: [String] = []
     @Published var developerModeDisabled: Bool = false
     @Published var isRepairing: Bool = false
@@ -272,6 +275,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     private static let manualRsdPortKey = "paperclip.connection.manualRsdPort"
     private static let tunnelUDIDKey = "paperclip.connection.tunnelUDID"
     private static let wirelessModeKey = "paperclip.connection.wirelessMode"
+    private static let autoConnectEnabledKey = "paperclip.connection.autoConnectEnabled"
     private static let logFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "zh_TW")
@@ -287,6 +291,10 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         manualRsdPort = defaults.string(forKey: Self.manualRsdPortKey) ?? ""
         tunnelUDID = defaults.string(forKey: Self.tunnelUDIDKey) ?? ""
         isWirelessMode = defaults.bool(forKey: Self.wirelessModeKey)
+        if defaults.object(forKey: Self.autoConnectEnabledKey) == nil {
+            defaults.set(true, forKey: Self.autoConnectEnabledKey)
+        }
+        isAutoConnectEnabled = defaults.bool(forKey: Self.autoConnectEnabledKey)
         
         // CLI path will be resolved lazily on first use
     }
@@ -342,6 +350,27 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     func connectDevice() {
         Task {
             await connectDeviceInternal(autoTriggered: false, force: true)
+        }
+    }
+
+    func connectDeviceIfAvailable() {
+        guard isAutoConnectEnabled else { return }
+        guard !isConnected && !isConnecting else { return }
+        
+        Task {
+            do {
+                let cmd = try resolveCLI()
+                appendLog("啟動自動偵測：掃描已連線的 iOS 裝置...")
+                let devices = try await listConnectedDevices(using: cmd)
+                if !devices.isEmpty {
+                    appendLog("啟動自動偵測：偵測到 \(devices.count) 台 iOS 裝置，自動啟動連線流程")
+                    await connectDeviceInternal(autoTriggered: false, force: true)
+                } else {
+                    appendLog("啟動自動偵測：未偵測到任何連接的 iOS 裝置，跳過自動連線")
+                }
+            } catch {
+                appendLog("啟動自動偵測失敗：\(error.localizedDescription)")
+            }
         }
     }
 
