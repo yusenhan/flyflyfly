@@ -191,7 +191,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     @Published var systemInfo: IOSSystemInfo = IOSSystemInfo()
     @Published private(set) var deviceName: String = "未連接"
     
-    private var sysMonProcess: Process?
+    private var dtxClient: DTXClient?
     @Published private(set) var lastError: String?
     @Published var manualRsdHost: String = "" {
         didSet { UserDefaults.standard.set(manualRsdHost, forKey: Self.manualRsdHostKey) }
@@ -1256,69 +1256,55 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     private func startSystemMonitoring() {
         stopSystemMonitoring()
         
-        guard let udid = connectedUDID, let cli = cachedCLIPath else { return }
+        guard let udid = connectedUDID else { return }
         
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: cli)
-        process.arguments = ["remote", "diagnostics", "sysmontap", "--udid", udid, "--json"]
+        let client = DTXClient()
+        client.delegate = self
+        self.dtxClient = client
         
-        let pipe = Pipe()
-        process.standardOutput = pipe
+        print("[DeviceManager] 啟動原生 DTX 效能監控，UDID: \(udid)")
         
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            
-            if let line = String(data: data, encoding: .utf8) {
-                // Buffer lines as sysmontap output can be fragmented
-                DispatchQueue.main.async { [weak self] in
-                    self?.parseSystemInfoChunk(line)
+        Task {
+            do {
+                if self.isLegacyMode {
+                    // Legacy 模式 (iOS 16-)
+                    let devices = self.usbmuxMonitor.devices
+                    guard let picked = devices.first(where: { $0.identifier == udid || $0.uniqueDeviceID == udid }),
+                          let deviceID = picked.deviceID else {
+                        throw NSError(domain: "DeviceManager", code: -70, userInfo: [NSLocalizedDescriptionKey: "找不到對應的 USBMux DeviceID"])
+                    }
+                    
+                    // 原生啟動並連接 instruments 服務
+                    let socketFd = try await self.connectLegacyInstrumentsService(deviceID: deviceID)
+                    
+                    // 啟動 DTXClient
+                    try await client.startLegacy(socketFd: socketFd)
+                    
+                } else {
+                    // RSD 模式 (iOS 17+)
+                    guard let ep = self.rsdEndpoint else {
+                        throw NSError(domain: "DeviceManager", code: -71, userInfo: [NSLocalizedDescriptionKey: "找不到有效的 RSD Endpoint"])
+                    }
+                    
+                    guard let portInt = Int(ep.port) else {
+                        throw NSError(domain: "DeviceManager", code: -72, userInfo: [NSLocalizedDescriptionKey: "RSD Port 格式無效"])
+                    }
+                    
+                    // 啟動 DTXClient
+                    try await client.startRsd(host: ep.host, rsdPort: portInt)
                 }
+                print("[DeviceManager] 原生 DTX 效能監控啟動成功！")
+            } catch {
+                print("[DeviceManager] 原生 DTX 效能監控啟動失敗: \(error.localizedDescription)")
+                self.appendLog("❌ 效能監控啟動失敗: \(error.localizedDescription)")
             }
-        }
-        
-        do {
-            try process.run()
-            sysMonProcess = process
-            print("[DeviceManager] System monitoring started for \(udid)")
-        } catch {
-            print("[DeviceManager] Failed to start system monitoring: \(error)")
         }
     }
     
     private func stopSystemMonitoring() {
-        sysMonProcess?.terminate()
-        sysMonProcess = nil
+        dtxClient?.stop()
+        dtxClient = nil
         systemInfo = IOSSystemInfo()
-    }
-    
-    private func parseSystemInfoChunk(_ chunk: String) {
-        Task { @MainActor in
-            var updated = systemInfo
-            
-            // Sysmontap JSON output is complex. We use regex to find key metrics.
-            // CPU: "CPU": 12.5
-            if let cpuMatch = chunk.range(of: "\"CPU\"\\s*:\\s*([0-9.]+)", options: .regularExpression) {
-                let parts = chunk[cpuMatch].split(separator: ":")
-                if parts.count == 2, let val = Double(parts[1].trimmingCharacters(in: .whitespaces)) {
-                    updated.cpuUsage = val
-                }
-            }
-            
-            // RAM: "phys_footprint": 123456789
-            if let ramMatch = chunk.range(of: "\"phys_footprint\"\\s*:\\s*([0-9.]+)", options: .regularExpression) {
-                let parts = chunk[ramMatch].split(separator: ":")
-                if parts.count == 2, let val = Double(parts[1].trimmingCharacters(in: .whitespaces)) {
-                    updated.ramUsed = val / (1024 * 1024 * 1024)
-                    updated.ramTotal = 8.0 // Approx for modern iPhones
-                }
-            }
-            
-            // Battery & Thermal (Optional fallback via diagnostics relay if sysmontap doesn't include it)
-            // For now, focus on CPU/RAM from sysmontap
-            
-            self.systemInfo = updated
-        }
     }
 
     private func appendLog(_ text: String) {
@@ -1644,5 +1630,288 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 try fh.close()
             } catch { }
         }
+    }
+
+    // ==============================================================================
+    // 原生 Legacy DVT Instruments 連線 (iOS 16-)
+    // ==============================================================================
+    
+    private struct UsbmuxHeader {
+        var length: UInt32
+        var version: UInt32
+        var type: UInt32
+        var tag: UInt32
+    }
+
+    nonisolated private func connectLegacyInstrumentsService(deviceID: Int) async throws -> Int32 {
+        let socketPath = "/var/run/usbmuxd"
+        
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -80, userInfo: [NSLocalizedDescriptionKey: "無法創建 usbmuxd socket"])
+        }
+        
+        var success = false
+        defer {
+            if !success {
+                close(fd)
+            }
+        }
+        
+        var tv = timeval()
+        tv.tv_sec = 3
+        tv.tv_usec = 0
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        
+        var addr = sockaddr_un()
+        addr.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        _ = withUnsafeMutablePointer(to: &addr.sun_path) { pointer in
+            let rawPointer = UnsafeMutableRawPointer(pointer).assumingMemoryBound(to: CChar.self)
+            for (i, byte) in pathBytes.enumerated() {
+                if i < 104 { rawPointer[i] = byte }
+            }
+        }
+        
+        let addrSize = MemoryLayout<sockaddr_un>.size
+        let connectRes = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.connect(fd, sockaddrPointer, socklen_t(addrSize))
+            }
+        }
+        
+        guard connectRes >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -81, userInfo: [NSLocalizedDescriptionKey: "連線至 /var/run/usbmuxd 失敗"])
+        }
+        
+        // Connect to Lockdownd port (62078)
+        let connectPlist: [String: Any] = [
+            "ClientVersionString": "flyflyfly-monitor",
+            "DeviceID": deviceID,
+            "PortNumber": 32498, // htons(62078)
+            "MessageType": "Connect",
+            "ProgName": "flyflyfly"
+        ]
+        
+        guard sendUsbmuxPlist(fd, plist: connectPlist, tag: 1) else {
+            throw NSError(domain: "DeviceManager", code: -82, userInfo: [NSLocalizedDescriptionKey: "發送 usbmux 連線 lockdown 請求失敗"])
+        }
+        
+        guard let connResult = readUsbmuxResponse(fd) else {
+            throw NSError(domain: "DeviceManager", code: -83, userInfo: [NSLocalizedDescriptionKey: "讀取 usbmux 連線 lockdown 回應超時或損毀"])
+        }
+        
+        if let number = connResult["Number"] as? Int, number != 0 {
+            throw NSError(domain: "DeviceManager", code: -84, userInfo: [NSLocalizedDescriptionKey: "usbmux 拒絕 lockdown 連線，錯誤碼: \(number)"])
+        }
+        
+        // 發送 StartService com.apple.instruments.deviceserver 請求
+        let startServiceRequest: [String: Any] = [
+            "Label": "flyflyfly",
+            "Request": "StartService",
+            "Service": "com.apple.instruments.deviceserver"
+        ]
+        
+        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: startServiceRequest, format: .xml, options: 0) else {
+            throw NSError(domain: "DeviceManager", code: -85, userInfo: [NSLocalizedDescriptionKey: "無法序列化 StartService Plist"])
+        }
+        
+        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
+        var sendData = Data()
+        withUnsafePointer(to: &lengthHeader) { pointer in
+            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
+        }
+        sendData.append(reqData)
+        
+        let bytesWritten = sendData.withUnsafeBytes { buffer in
+            write(fd, buffer.baseAddress, sendData.count)
+        }
+        
+        guard bytesWritten == sendData.count else {
+            throw NSError(domain: "DeviceManager", code: -86, userInfo: [NSLocalizedDescriptionKey: "寫入 StartService 數據失敗"])
+        }
+        
+        // 讀取回應長度
+        var lenBuffer = [UInt8](repeating: 0, count: 4)
+        let lenRead = read(fd, &lenBuffer, 4)
+        guard lenRead == 4 else {
+            throw NSError(domain: "DeviceManager", code: -87, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 回應長度失敗"])
+        }
+        
+        let responseLength = lenBuffer.withUnsafeBytes { buffer in
+            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+        }
+        
+        guard responseLength > 0 && responseLength < 1_000_000 else {
+            throw NSError(domain: "DeviceManager", code: -88, userInfo: [NSLocalizedDescriptionKey: "異常的 StartService 回應長度: \(responseLength)"])
+        }
+        
+        // 讀取回應 Plist Payload
+        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
+        var totalBytesRead = 0
+        while totalBytesRead < Int(responseLength) {
+            let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
+            if readChunk <= 0 {
+                throw NSError(domain: "DeviceManager", code: -89, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 回應 Payload 中斷"])
+            }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+            throw NSError(domain: "DeviceManager", code: -90, userInfo: [NSLocalizedDescriptionKey: "無法解析 StartService 回應 Plist"])
+        }
+        
+        if let error = plist["Error"] as? String {
+            throw NSError(domain: "DeviceManager", code: -91, userInfo: [NSLocalizedDescriptionKey: "啟動 Instruments 服務失敗: \(error)"])
+        }
+        
+        guard let servicePort = plist["Port"] as? Int else {
+            throw NSError(domain: "DeviceManager", code: -92, userInfo: [NSLocalizedDescriptionKey: "StartService 未傳回 Port"])
+        }
+        
+        close(fd)
+        
+        // 建立第二次連線到 usbmuxd 去對接服務的 Port
+        let serviceFd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard serviceFd >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -93, userInfo: [NSLocalizedDescriptionKey: "無法創建第二個 usbmuxd socket"])
+        }
+        
+        var serviceSuccess = false
+        defer {
+            if !serviceSuccess {
+                close(serviceFd)
+            }
+        }
+        
+        setsockopt(serviceFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(serviceFd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        
+        let connectServiceRes = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.connect(serviceFd, sockaddrPointer, socklen_t(addrSize))
+            }
+        }
+        
+        guard connectServiceRes >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -94, userInfo: [NSLocalizedDescriptionKey: "第二次連線至 usbmuxd 失敗"])
+        }
+        
+        let hostPort = UInt16(servicePort)
+        let networkPort = CFSwapInt16HostToBig(hostPort)
+        
+        let connectServicePlist: [String: Any] = [
+            "ClientVersionString": "flyflyfly-monitor",
+            "DeviceID": deviceID,
+            "PortNumber": Int(networkPort),
+            "MessageType": "Connect",
+            "ProgName": "flyflyfly"
+        ]
+        
+        guard sendUsbmuxPlist(serviceFd, plist: connectServicePlist, tag: 2) else {
+            throw NSError(domain: "DeviceManager", code: -95, userInfo: [NSLocalizedDescriptionKey: "發送 usbmux 連線 Instruments 服務請求失敗"])
+        }
+        
+        guard let serviceConnResult = readUsbmuxResponse(serviceFd) else {
+            throw NSError(domain: "DeviceManager", code: -96, userInfo: [NSLocalizedDescriptionKey: "讀取 usbmux 連線 Instruments 服務回應超時或損毀"])
+        }
+        
+        if let number = serviceConnResult["Number"] as? Int, number != 0 {
+            throw NSError(domain: "DeviceManager", code: -97, userInfo: [NSLocalizedDescriptionKey: "usbmux 拒絕 Instruments 服務連線，錯誤碼: \(number)"])
+        }
+        
+        serviceSuccess = true
+        success = true
+        return serviceFd
+    }
+
+    nonisolated private func sendUsbmuxPlist(_ socketFd: Int32, plist: [String: Any], tag: UInt32) -> Bool {
+        guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
+            return false
+        }
+        
+        let headerLength = MemoryLayout<UsbmuxHeader>.size
+        let totalLength = headerLength + plistData.count
+        
+        var header = UsbmuxHeader(
+            length: UInt32(totalLength),
+            version: 1,
+            type: 8,
+            tag: tag
+        )
+        
+        var data = Data()
+        withUnsafePointer(to: &header) { pointer in
+            data.append(UnsafeBufferPointer(start: pointer, count: 1))
+        }
+        data.append(plistData)
+        
+        let bytesWritten = data.withUnsafeBytes { buffer in
+            write(socketFd, buffer.baseAddress, data.count)
+        }
+        
+        return bytesWritten == data.count
+    }
+    
+    nonisolated private func readUsbmuxResponse(_ socketFd: Int32) -> [String: Any]? {
+        let headerLength = MemoryLayout<UsbmuxHeader>.size
+        var headerBuffer = [UInt8](repeating: 0, count: headerLength)
+        
+        let bytesRead = read(socketFd, &headerBuffer, headerLength)
+        guard bytesRead == headerLength else { return nil }
+        
+        let header = headerBuffer.withUnsafeBytes { buffer in
+            buffer.load(as: UsbmuxHeader.self)
+        }
+        
+        let payloadLength = Int(header.length) - headerLength
+        guard payloadLength > 0 else { return nil }
+        
+        var payloadBuffer = [UInt8](repeating: 0, count: payloadLength)
+        var totalBytesRead = 0
+        while totalBytesRead < payloadLength {
+            let readChunk = read(socketFd, &payloadBuffer[totalBytesRead], payloadLength - totalBytesRead)
+            if readChunk <= 0 {
+                return nil
+            }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+            return nil
+        }
+        
+        return plist
+    }
+}
+
+// ==============================================================================
+// DTXClientDelegate 實作
+// ==============================================================================
+
+extension DeviceManager: DTXClientDelegate {
+    @MainActor
+    public func dtxClient(_ client: DTXClient, didReceiveCPU cpu: Double, ramUsedGB ram: Double) {
+        guard client === self.dtxClient else { return }
+        
+        self.systemInfo.cpuUsage = cpu
+        self.systemInfo.ramUsed = ram
+        self.systemInfo.ramTotal = 8.0 // 估計的實體記憶體總量
+    }
+    
+    @MainActor
+    public func dtxClient(_ client: DTXClient, didDisconnectWithError error: Error?) {
+        guard client === self.dtxClient else { return }
+        
+        let errorMsg = error?.localizedDescription ?? "正常中斷"
+        print("[DeviceManager] 原生 DTX 監控連線中斷: \(errorMsg)")
+        self.appendLog("⚠️ 原生 DTX 監控連線中斷: \(errorMsg)")
+        
+        self.dtxClient = nil
+        self.systemInfo = IOSSystemInfo()
     }
 }

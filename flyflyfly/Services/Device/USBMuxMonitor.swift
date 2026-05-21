@@ -10,8 +10,9 @@ public struct USBMuxDevice: Codable, Sendable, Identifiable, Equatable {
     public let uniqueDeviceID: String?
     public let productType: String?
     public let productVersion: String?
+    public let deviceID: Int?
     
-    public init(connectionType: String?, deviceClass: String?, deviceName: String?, identifier: String?, uniqueDeviceID: String?, productType: String?, productVersion: String?) {
+    public init(connectionType: String?, deviceClass: String?, deviceName: String?, identifier: String?, uniqueDeviceID: String?, productType: String?, productVersion: String?, deviceID: Int?) {
         self.connectionType = connectionType
         self.deviceClass = deviceClass
         self.deviceName = deviceName
@@ -19,6 +20,7 @@ public struct USBMuxDevice: Codable, Sendable, Identifiable, Equatable {
         self.uniqueDeviceID = uniqueDeviceID
         self.productType = productType
         self.productVersion = productVersion
+        self.deviceID = deviceID
     }
 }
 
@@ -193,7 +195,8 @@ public class USBMuxMonitor: ObservableObject {
                     identifier: serial,
                     uniqueDeviceID: serial,
                     productType: details["ProductType"],
-                    productVersion: details["ProductVersion"]
+                    productVersion: details["ProductVersion"],
+                    deviceID: deviceID
                 )
                 
                 self.lock.lock()

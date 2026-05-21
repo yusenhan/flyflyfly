@@ -61,6 +61,8 @@
 		9C08D2DB5A4E4FB494EF6307 /* SpatialIndex.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F8CF882720C4704A1094E7F /* SpatialIndex.cpp */; };
 		4E15B0841FF94E99915F05BB /* NativeTunnel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3F57B8AF77954FAC8FE89BF7 /* NativeTunnel.cpp */; };
 		9F8CA785A7374F52A801DFBA /* USBMuxMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84464337A1264BFA9AE79288 /* USBMuxMonitor.swift */; };
+		ADDC20F2133D4751B70C9FA1 /* DTXClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B29A36640540B2B8D62569 /* DTXClient.swift */; };
+		F73991B9CD6B40078974E4E0 /* DTXMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC4077ABF34CE09EE11221 /* DTXMessage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -146,6 +148,8 @@
 		3F57B8AF77954FAC8FE89BF7 /* NativeTunnel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "NativeTunnel.cpp"; sourceTree = "<group>"; };
 		5403D10F691F4EEB826A3884 /* NativeTunnel.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "NativeTunnel.hpp"; sourceTree = "<group>"; };
 		84464337A1264BFA9AE79288 /* USBMuxMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "USBMuxMonitor.swift"; sourceTree = "<group>"; };
+		87B29A36640540B2B8D62569 /* DTXClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DTXClient.swift"; sourceTree = "<group>"; };
+		29FC4077ABF34CE09EE11221 /* DTXMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DTXMessage.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 
@@ -374,6 +378,8 @@
 		D2110251AFE8B9C9728D1B8B /* Device */ = {
 			isa = PBXGroup;
 			children = (
+				29FC4077ABF34CE09EE11221,
+				87B29A36640540B2B8D62569,
 				84464337A1264BFA9AE79288,
 				F07FBD9B323D571FD2A548C9,
 				BF0C13B514198B7B6A9C58C2,
@@ -581,6 +587,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ADDC20F2133D4751B70C9FA1,
+				F73991B9CD6B40078974E4E0,
 				9F8CA785A7374F52A801DFBA,
 				4E15B0841FF94E99915F05BB,
 				9C08D2DB5A4E4FB494EF6307,
