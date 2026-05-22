@@ -1,5 +1,7 @@
 # flyflyfly — 功能規格文件 (Functional Specification Document, FSD)
 
+**文件與軟體版本**：`v0.99`
+
 本規格文件詳細定義了 `flyflyfly` macOS 應用程式的功能架構、使用者介面控制、核心操作流程、極致安全的 Native 雙向通訊協定，以及在 2026 年 5 月底落實的**「100% 純原生 Swift 去 Python 化」**與**「程式碼資安風險全面加固」**等最新技術規範。
 
 ---

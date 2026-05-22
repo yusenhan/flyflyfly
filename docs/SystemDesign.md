@@ -1,5 +1,7 @@
 # flyflyfly - 系統設計文件 (System Design)
 
+**文件與系統版本**：`v0.99`
+
 ## 1. 架構設計 (Architecture)
 flyflyfly 採用 **100% 全原生 Swift 架構**，擺脫了所有外部 Python 背景行程 (`pymobiledevice3`)、外部二進位工具 (`dvt-location-stream`) 及 C++ 通訊封裝與 Socket 隧道。這項革新不僅顯著降低了系統資源佔用，亦解決了多執行緒同步、本地埠衝突與 Apple 安全沙盒權限限制等棘手問題。
 

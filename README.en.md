@@ -2,12 +2,15 @@
 
 中文版: [Traditional Chinese README](./README.md)
 
+![Version](https://img.shields.io/badge/Version-v0.99-brightgreen?style=flat-square)
 ![macOS Support](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square&logo=apple)
 ![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
 ![Swift Native](https://img.shields.io/badge/Language-Swift-orange?style=flat-square&logo=swift)
 ![Architecture](https://img.shields.io/badge/Architecture-100%25%20Pure%20Swift-red?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
+
+**Current Version**: `v0.99`
 
 **flyflyfly is a flagship-grade iOS location simulation utility built exclusively for macOS.**  
 Powered by a **100% self-developed, highly efficient, pure Swift DTX protocol and USBMux Socket penetration architecture**, it allows developers and testers on Apple Silicon (M1/M2/M3/M4) or Intel Macs to spoof iPhone/iPad GPS coordinates with extreme precision and negligible resource consumption, fully supporting iOS 17, 18, and beyond.

@@ -1,6 +1,7 @@
 # flyflyfly — Project Knowledge Base
 
 **Generated:** 2026-05-22
+**Version:** v0.99
 **Commit:** Native Swift Architecture (DTX + USBMux)
 **Branch:** main
 
