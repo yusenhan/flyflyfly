@@ -421,6 +421,56 @@ public class DTXClient: @unchecked Sendable {
         
         try await sendDTXMessage(startMsg)
         print("[DTXClient] 原生系統效能監控啟動成功！")
+        
+        // 4. 發送管道請求：將 Channel 2 註冊給 LocationSimulation 服務
+        print("[DTXClient] 正在發送註冊 Channel 2 (LocationSimulation) 請求...")
+        let requestLocationChannelMsg = try DTXMessage.makeMethodCall(
+            identifier: getNextIdentifier(),
+            channelCode: 0,
+            selector: "_requestChannelWithIdentifier:target:",
+            arguments: [
+                .int32(2), // Channel ID
+                .string("com.apple.instruments.server.services.coreservices.LocationSimulation") // Target Service Name
+            ],
+            expectsReply: true
+        )
+        
+        try await sendDTXMessage(requestLocationChannelMsg)
+        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        print("[DTXClient] 原生位置模擬通道註冊成功！")
+    }
+    
+    /// 原生發送模擬坐標 (Channel 2)
+    public func simulateLocation(latitude: Double, longitude: Double) async throws {
+        guard isRunning else {
+            throw NSError(domain: "DTXClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "DTXClient 未連線"])
+        }
+        let msg = try DTXMessage.makeMethodCall(
+            identifier: getNextIdentifier(),
+            channelCode: 2, // Channel 2
+            selector: "simulateLocationWithLatitude:longitude:",
+            arguments: [
+                .double(latitude),
+                .double(longitude)
+            ],
+            expectsReply: true
+        )
+        try await sendDTXMessage(msg)
+    }
+
+    /// 原生清除模擬定位 (Channel 2)
+    public func stopLocationSimulation() async throws {
+        guard isRunning else {
+            throw NSError(domain: "DTXClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "DTXClient 未連線"])
+        }
+        let msg = try DTXMessage.makeMethodCall(
+            identifier: getNextIdentifier(),
+            channelCode: 2, // Channel 2
+            selector: "stopLocationSimulation",
+            arguments: [],
+            expectsReply: true
+        )
+        try await sendDTXMessage(msg)
     }
     
     private func getNextIdentifier() -> UInt32 {

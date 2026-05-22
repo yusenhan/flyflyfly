@@ -935,9 +935,16 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
     private func clearSimulatedLocationAsyncInternal() async throws {
         do {
+            self.dvtStream.clear()
+            
+            // 如果是原生的 DVT 模式，呼叫 dvtStream.clear() 就已經透過 DTXClient 完成原生清空了，不需再呼叫外部 CLI
+            if self.simulateLocationMode == .dvt {
+                print("Sweep: cleared location (Native DVT)")
+                return
+            }
+            
             let cmd = try resolveCLI()
             let mode = self.simulateLocationMode ?? .legacy
-            self.dvtStream.clear()
             
             let args: [String]
             if self.isLegacyMode {
@@ -1177,12 +1184,6 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             handleUnexpectedConnectionLoss(reason: "Tunnel 服務已中斷")
             return
         }
-        
-        // Monitor DVT location stream if active
-        if simulateLocationMode == .dvt && !dvtStream.isRunning {
-            handleUnexpectedConnectionLoss(reason: "定位串流服務已中斷")
-            return
-        }
     }
 
     private func handleUnexpectedConnectionLoss(reason: String) {
@@ -1293,6 +1294,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                     // 啟動 DTXClient
                     try await client.startRsd(host: ep.host, rsdPort: portInt)
                 }
+                
+                // 啟動成功後，將當前 client 注入 dvtStream 適配器
+                self.dvtStream.setClient(client)
                 print("[DeviceManager] 原生 DTX 效能監控啟動成功！")
             } catch {
                 print("[DeviceManager] 原生 DTX 效能監控啟動失敗: \(error.localizedDescription)")
@@ -1302,6 +1306,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }
     
     private func stopSystemMonitoring() {
+        self.dvtStream.setClient(nil)
         dtxClient?.stop()
         dtxClient = nil
         systemInfo = IOSSystemInfo()

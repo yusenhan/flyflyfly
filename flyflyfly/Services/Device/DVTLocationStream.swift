@@ -1,18 +1,27 @@
 import Foundation
 
 final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
-    private let engine = FastMotionEngineWrapper()
+    private weak var dtxClient: DTXClient?
     private var currentHost: String?
     private var currentPort: String?
     private let stateLock = NSLock()
     private var isReady = false
 
     var isRunning: Bool {
-        engine.isNativeTunnelConnected()
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return dtxClient != nil && isReady
     }
 
     deinit {
         stop()
+    }
+
+    /// 注入當前設備作用中的 DTXClient 連線實體
+    func setClient(_ client: DTXClient?) {
+        stateLock.lock()
+        self.dtxClient = client
+        stateLock.unlock()
     }
 
     func start(
@@ -28,43 +37,45 @@ final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
 
         stop()
 
-        guard let portInt = Int32(port) else {
-            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "無效的連接埠"])
+        guard dtxClient != nil else {
+            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "原生 DTX 客戶端未建立"])
         }
 
-        let success = engine.connect(toHost: host, port: portInt)
-        
-        if success {
-            currentHost = host
-            currentPort = port
-            setReady(true)
-            onOutput("CONNECTED\n")
-            onOutput("READY\n")
-        } else {
-            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "原生隧道連接失敗"])
-        }
+        currentHost = host
+        currentPort = port
+        setReady(true)
+        onOutput("CONNECTED\n")
+        onOutput("READY\n")
     }
 
     func send(latitude: Double, longitude: Double) throws {
-        guard isRunning else {
+        guard let client = dtxClient else {
             throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "隧道未連線"])
         }
         
-        let success = engine.sendNativeCoordinateLat(latitude, lon: longitude)
-        if !success {
-            throw NSError(domain: "DVTLocationStream", code: -1, userInfo: [NSLocalizedDescriptionKey: "坐標發送失敗"])
+        // 透過 Task 異步投遞位置模擬，防止 UI/主執行緒卡頓，提供流暢高頻的軌跡注入
+        Task {
+            do {
+                try await client.simulateLocation(latitude: latitude, longitude: longitude)
+            } catch {
+                print("[DVTLocationStream] 原生位置模擬注入失敗: \(error.localizedDescription)")
+            }
         }
     }
 
     func clear() {
-        // Native tunnel simplified: clear not explicitly needed for location override
+        Task {
+            try? await dtxClient?.stopLocationSimulation()
+        }
     }
 
     func stop() {
-        engine.disconnectNativeTunnel()
         setReady(false)
         currentHost = nil
         currentPort = nil
+        Task {
+            try? await dtxClient?.stopLocationSimulation()
+        }
     }
 
     private func setReady(_ ready: Bool) {
