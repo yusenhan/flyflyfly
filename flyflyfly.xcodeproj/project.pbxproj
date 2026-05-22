@@ -548,17 +548,15 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/bundled/pymobiledevice3",
 			);
 			name = "Copy Bundled Tools";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/pymobiledevice3",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\ncp -R \"$SRCROOT/bundled/pymobiledevice3\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3/pymobiledevice3\"\n";
+			shellScript = "echo \"No tools to copy\"\n";
 		};
 		F0B100022F70000100BUILD /* Build Bundled Tools */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -576,7 +574,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\ncd \"$SRCROOT\"\nif [ ! -d \"bundled\" ]; then\n    mkdir bundled\nfi\n\nif [ ! -e \"bundled/pymobiledevice3\" ]; then\n    bash scripts/build-bundled-pymobiledevice3.sh\nfi\n";
+			shellScript = "echo \"No tools to build\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

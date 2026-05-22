@@ -312,9 +312,8 @@ final class AppViewModel: ObservableObject {
         
         setupDeviceObservers()
         
-        // Pre-warm CLI path in background task to avoid lag on first use in Settings tab
+        // Pre-warm in background task to check device availability
         Task {
-            _ = try? deviceManager.resolveCLI()
             if deviceStore.isAutoConnectEnabled {
                 deviceStore.connectDeviceIfAvailable()
             }

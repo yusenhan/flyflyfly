@@ -28,7 +28,6 @@ protocol DeviceControlling: AnyObject {
     func repairEnvironment() async
     func connectDeviceIfAvailable()
     func connect()
-    func resolveCLI() throws -> [String]
     func connectDevice()
     func disconnect()
     func sendCoordinate(latitude: Double, longitude: Double)
