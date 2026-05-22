@@ -323,17 +323,19 @@ public struct DTXMessage: Sendable, CustomStringConvertible {
     public static func parse(from data: Data) throws -> (DTXMessage, Int)? {
         guard data.count >= 48 else { return nil }
         
-        let magicVal = data.subdata(in: 0..<4).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let start = data.startIndex
+        
+        let magicVal = data.subdata(in: start..<start+4).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         guard UInt32(littleEndian: magicVal) == Self.magic else {
             throw NSError(domain: "DTXMessage", code: -100, userInfo: [NSLocalizedDescriptionKey: "無效的 DTX Magic 標頭"])
         }
         
-        let headerSizeVal = data.subdata(in: 4..<8).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let headerSizeVal = data.subdata(in: start+4..<start+8).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let headerSize = Int(UInt32(littleEndian: headerSizeVal))
         
         guard data.count >= headerSize + 16 else { return nil }
         
-        let dataSizeVal = data.subdata(in: 12..<16).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let dataSizeVal = data.subdata(in: start+12..<start+16).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let bodySize = Int(UInt32(littleEndian: dataSizeVal))
         
         let totalSize = headerSize + bodySize
@@ -342,29 +344,29 @@ public struct DTXMessage: Sendable, CustomStringConvertible {
         }
         
         // 解析 Header
-        let identifierVal = data.subdata(in: 16..<20).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let identifierVal = data.subdata(in: start+16..<start+20).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let identifier = UInt32(littleEndian: identifierVal)
         
-        let convIndexVal = data.subdata(in: 20..<24).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let convIndexVal = data.subdata(in: start+20..<start+24).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let conversationIndex = UInt32(littleEndian: convIndexVal)
         
-        let chanCodeVal = data.subdata(in: 24..<28).withUnsafeBytes { $0.load(as: Int32.self) }
+        let chanCodeVal = data.subdata(in: start+24..<start+28).withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
         let channelCode = Int32(littleEndian: chanCodeVal)
         
-        let flagsVal = data.subdata(in: 28..<32).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let flagsVal = data.subdata(in: start+28..<start+32).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let expectsReply = UInt32(littleEndian: flagsVal) != 0
         
         // 解析 Payload Header (位於 headerSize 開始的 16 個 bytes)
-        let payloadHeaderOffset = headerSize
+        let payloadHeaderOffset = start + headerSize
         let msgTypeRaw = data[payloadHeaderOffset]
         guard let msgType = DTXMessageType(rawValue: msgTypeRaw) else {
             throw NSError(domain: "DTXMessage", code: -101, userInfo: [NSLocalizedDescriptionKey: "無效的 MessageType: \(msgTypeRaw)"])
         }
         
-        let auxSizeVal = data.subdata(in: (payloadHeaderOffset + 4)..<(payloadHeaderOffset + 8)).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let auxSizeVal = data.subdata(in: (payloadHeaderOffset + 4)..<(payloadHeaderOffset + 8)).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let auxSize = Int(UInt32(littleEndian: auxSizeVal))
         
-        let totalPayloadSizeVal = data.subdata(in: (payloadHeaderOffset + 8)..<(payloadHeaderOffset + 12)).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let totalPayloadSizeVal = data.subdata(in: (payloadHeaderOffset + 8)..<(payloadHeaderOffset + 12)).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         let totalPayloadSize = Int(UInt32(littleEndian: totalPayloadSizeVal))
         
         let payloadSize = totalPayloadSize - auxSize
@@ -372,7 +374,7 @@ public struct DTXMessage: Sendable, CustomStringConvertible {
         let auxStart = payloadHeaderOffset + 16
         let payloadStart = auxStart + auxSize
         
-        guard payloadStart + payloadSize <= totalSize else {
+        guard payloadStart + payloadSize <= start + totalSize else {
             throw NSError(domain: "DTXMessage", code: -102, userInfo: [NSLocalizedDescriptionKey: "資料包大小不一致"])
         }
         
@@ -405,35 +407,40 @@ public struct DTXMessage: Sendable, CustomStringConvertible {
 extension Data {
     mutating func readUInt32Le() -> UInt32? {
         guard self.count >= 4 else { return nil }
-        let val = self.subdata(in: 0..<4).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let start = self.startIndex
+        let val = self.subdata(in: start..<start+4).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         self.removeFirst(4)
         return UInt32(littleEndian: val)
     }
     
     mutating func readInt32Le() -> Int32? {
         guard self.count >= 4 else { return nil }
-        let val = self.subdata(in: 0..<4).withUnsafeBytes { $0.load(as: Int32.self) }
+        let start = self.startIndex
+        let val = self.subdata(in: start..<start+4).withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
         self.removeFirst(4)
         return Int32(littleEndian: val)
     }
     
     mutating func readUInt64Le() -> UInt64? {
         guard self.count >= 8 else { return nil }
-        let val = self.subdata(in: 0..<8).withUnsafeBytes { $0.load(as: UInt64.self) }
+        let start = self.startIndex
+        let val = self.subdata(in: start..<start+8).withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) }
         self.removeFirst(8)
         return UInt64(littleEndian: val)
     }
     
     mutating func readInt64Le() -> Int64? {
         guard self.count >= 8 else { return nil }
-        let val = self.subdata(in: 0..<8).withUnsafeBytes { $0.load(as: Int64.self) }
+        let start = self.startIndex
+        let val = self.subdata(in: start..<start+8).withUnsafeBytes { $0.loadUnaligned(as: Int64.self) }
         self.removeFirst(8)
         return Int64(littleEndian: val)
     }
     
     mutating func readDoubleLe() -> Double? {
         guard self.count >= 8 else { return nil }
-        let val = self.subdata(in: 0..<8).withUnsafeBytes { $0.load(as: Double.self) }
+        let start = self.startIndex
+        let val = self.subdata(in: start..<start+8).withUnsafeBytes { $0.loadUnaligned(as: Double.self) }
         self.removeFirst(8)
         let bits = UInt64(littleEndian: val.bitPattern)
         return Double(bitPattern: bits)
@@ -441,50 +448,51 @@ extension Data {
     
     mutating func readBytes(_ length: Int) -> Data? {
         guard self.count >= length else { return nil }
-        let chunk = self.subdata(in: 0..<length)
+        let start = self.startIndex
+        let chunk = self.subdata(in: start..<start+length)
         self.removeFirst(length)
         return chunk
     }
     
     mutating func appendUInt32Le(_ value: UInt32) {
         var val = value.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
     
     mutating func appendInt32Le(_ value: Int32) {
         var val = value.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
     
     mutating func appendUInt16Le(_ value: UInt16) {
         var val = value.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
     
     mutating func appendUInt64Le(_ value: UInt64) {
         var val = value.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
     
     mutating func appendInt64Le(_ value: Int64) {
         var val = value.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
     
     mutating func appendDoubleLe(_ value: Double) {
         var val = value.bitPattern.littleEndian
-        withUnsafePointer(to: &val) { pointer in
-            self.append(UnsafeBufferPointer(start: pointer, count: 1))
+        Swift.withUnsafeBytes(of: &val) { bytes in
+            self.append(contentsOf: bytes)
         }
     }
 }
