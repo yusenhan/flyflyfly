@@ -20,11 +20,9 @@ fi
 # 2. 清理系統背景可能卡死的殘留程序
 echo "[INFO] 步驟 2/4: 清理可能卡死在背景的連線程序..."
 HUNG_PY=$(pgrep -f "pymobiledevice3")
-HUNG_DVT=$(pgrep -f "dvt-location-stream")
 
-if [ ! -z "$HUNG_PY" ] || [ ! -z "$HUNG_DVT" ]; then
+if [ ! -z "$HUNG_PY" ]; then
     pkill -9 -f "pymobiledevice3" 2>/dev/null
-    pkill -9 -f "dvt-location-stream" 2>/dev/null
     echo "[SUCCESS] 已強制終止卡死的背景進程。"
 else
     echo "[INFO] 未偵測到卡死的背景連線進程。"

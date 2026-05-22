@@ -548,19 +548,17 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-			        "$(SRCROOT)/bundled/pymobiledevice3",
-			        "$(SRCROOT)/bundled/dvt-location-stream",
+				"$(SRCROOT)/bundled/pymobiledevice3",
 			);
 			name = "Copy Bundled Tools";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-			        "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/pymobiledevice3",
-			        "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/dvt-location-stream",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/pymobiledevice3",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\ncp -R \"$SRCROOT/bundled/pymobiledevice3\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3/pymobiledevice3\"\ncp \"$SRCROOT/bundled/dvt-location-stream\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dvt-location-stream\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dvt-location-stream\"\n";
+			shellScript = "set -e\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\ncp -R \"$SRCROOT/bundled/pymobiledevice3\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pymobiledevice3/pymobiledevice3\"\n";
 		};
 		F0B100022F70000100BUILD /* Build Bundled Tools */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -578,7 +576,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\ncd \"$SRCROOT\"\nif [ ! -d \"bundled\" ]; then\n    mkdir bundled\nfi\n\nif [ ! -e \"bundled/pymobiledevice3\" ]; then\n    bash scripts/build-bundled-pymobiledevice3.sh\nfi\n\nif [ ! -e \"bundled/dvt-location-stream\" ]; then\n    bash scripts/build-dvt-stream.sh\nfi\n";
+			shellScript = "set -e\ncd \"$SRCROOT\"\nif [ ! -d \"bundled\" ]; then\n    mkdir bundled\nfi\n\nif [ ! -e \"bundled/pymobiledevice3\" ]; then\n    bash scripts/build-bundled-pymobiledevice3.sh\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
