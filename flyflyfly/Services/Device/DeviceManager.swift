@@ -291,6 +291,8 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         dvtStream.stop()
         
         rsdEndpoint = nil
+        connectedUDID = nil
+        connectedVersion = nil
         pendingCoordinate = nil
         inFlight = false
     }
@@ -340,11 +342,19 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         ])
     }
 
+    private func isVersionLegacy(_ version: String) -> Bool {
+        let parts = version.split(separator: ".")
+        guard let majorStr = parts.first, let major = Int(majorStr) else {
+            return false
+        }
+        return major < 17
+    }
+
     private func connectDeviceInternal(autoTriggered: Bool, force: Bool) async {
         guard force || !isConnected else { return }
         if !autoTriggered {
             cancelAutoReconnect()
-            appendLog("開始連線 Apple 裝置 (手動 RSD 模式)")
+            appendLog("開始連線 Apple 裝置")
             self.developerModeDisabled = false
             setConnectionState(.connecting(step: "初始化"), deviceName: "連線中…", lastError: nil)
         } else {
@@ -360,9 +370,47 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         defer { self.isConnectionInFlight = false }
 
         do {
+            // 優先檢查是否有已連接的 USBMux 實體設備
+            let devices = usbmuxMonitor.devices
+            if let targetDevice = devices.first {
+                let ver = targetDevice.productVersion ?? "15.0"
+                let devName = targetDevice.deviceName ?? "iOS 裝置"
+                let udid = targetDevice.id
+                let devID = targetDevice.deviceID ?? 0
+                
+                let isLegacyDevice = isVersionLegacy(ver)
+                
+                if isLegacyDevice {
+                    self.appendLog("偵測到已連接的 Legacy 裝置：\(devName) (系統: \(ver), UDID: \(udid))，啟動純 Swift 原生直連通道...")
+                    self.setStage("啟動 Legacy 直連")
+                    
+                    self.connectedUDID = udid
+                    self.connectedVersion = ver
+                    
+                    // 1. 執行 USBMux 雙穿透，啟動定位模擬服務並獲取 socketFd
+                    let socketFd = try await connectLegacyDeviceLocationService(deviceID: devID)
+                    
+                    // 2. 啟動 dtxClient Legacy 模式
+                    let client = DTXClient()
+                    client.delegate = self
+                    self.dtxClient = client
+                    
+                    try await client.startLegacy(socketFd: socketFd)
+                    self.dvtStream.setClient(client)
+                    
+                    self.setConnectionState(.connected, deviceName: "\(devName) (iOS \(ver))", lastError: nil)
+                    self.appendLog("Legacy 裝置直連成功！定位服務已準備就緒。")
+                    self.cancelAutoReconnect()
+                    self.reconnectAttempt = 0
+                    return
+                } else {
+                    self.appendLog("偵測到已連接的 iOS 17+ 裝置：\(devName) (系統: \(ver))，退回 RSD 模式。")
+                }
+            }
+
             guard let manual = self.manualEndpointIfValid() else {
                 throw NSError(domain: "DeviceManager", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "在 100% 全原生 Swift 架構下，已完全移除內置 pymobiledevice3 依賴。若需在 iOS 17+ 上進行定位模擬，請點擊設定，並手動輸入在 Mac 終端機啟動 'pymobiledevice3 remote start-tunnel' 後獲取的 RSD Address 與 Port。"
+                    NSLocalizedDescriptionKey: "未偵測到已連線的 iOS 16 及以下設備。對於 iOS 17+ 設備，請點擊設定，並手動輸入在 Mac 終端機啟動 'pymobiledevice3 remote start-tunnel' 後獲取的 RSD Address 與 Port。"
                 ])
             }
             
@@ -386,6 +434,261 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 self.scheduleAutoReconnect(reason: error.localizedDescription)
             }
         }
+    }
+
+    private func connectLegacyDeviceLocationService(deviceID: Int) async throws -> Int32 {
+        let socketPath = "/var/run/usbmuxd"
+        
+        // -------------------------------------------------------------
+        // 步驟 1: 穿透 usbmuxd 連接 lockdownd 並發送 StartService
+        // -------------------------------------------------------------
+        self.appendLog("正在與 Lockdownd 握手以啟動定位服務...")
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -10, userInfo: [NSLocalizedDescriptionKey: "無法創建 Unix Socket"])
+        }
+        
+        signal(SIGPIPE, SIG_IGN)
+        
+        var tv = timeval()
+        tv.tv_sec = 4 // 4 秒超時
+        tv.tv_usec = 0
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        
+        var addr = sockaddr_un()
+        addr.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        _ = withUnsafeMutablePointer(to: &addr.sun_path) { pointer in
+            let rawPointer = UnsafeMutableRawPointer(pointer).assumingMemoryBound(to: CChar.self)
+            for (i, byte) in pathBytes.enumerated() {
+                if i < 104 { rawPointer[i] = byte }
+            }
+        }
+        
+        let addrSize = MemoryLayout<sockaddr_un>.size
+        let connectRes = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.connect(fd, sockaddrPointer, socklen_t(addrSize))
+            }
+        }
+        
+        guard connectRes >= 0 else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -11, userInfo: [NSLocalizedDescriptionKey: "無法連接到本地 usbmuxd"])
+        }
+        
+        let connectPlist: [String: Any] = [
+            "ClientVersionString": "flyflyfly",
+            "DeviceID": deviceID,
+            "PortNumber": 32498, // htons(62078) = 32498
+            "MessageType": "Connect",
+            "ProgName": "flyflyfly"
+        ]
+        
+        guard sendUsbmuxPlist(fd, plist: connectPlist, tag: 100) else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -12, userInfo: [NSLocalizedDescriptionKey: "發送 usbmux Connect 失敗"])
+        }
+        
+        guard let connResult = readUsbmuxResponse(fd, timeoutSeconds: 3) else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -13, userInfo: [NSLocalizedDescriptionKey: "讀取 usbmux Connect 回應失敗"])
+        }
+        
+        if let number = connResult["Number"] as? Int, number != 0 {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -14, userInfo: [NSLocalizedDescriptionKey: "usbmuxd 拒絕連接 Lockdownd (代碼: \(number))"])
+        }
+        
+        let startServiceRequest: [String: Any] = [
+            "Label": "flyflyfly",
+            "Request": "StartService",
+            "Service": "com.apple.dt.simulatelocation"
+        ]
+        
+        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: startServiceRequest, format: .xml, options: 0) else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -15, userInfo: [NSLocalizedDescriptionKey: "無法序列化 StartService 請求"])
+        }
+        
+        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
+        var sendData = Data()
+        withUnsafePointer(to: &lengthHeader) { pointer in
+            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
+        }
+        sendData.append(reqData)
+        
+        let bytesWritten = sendData.withUnsafeBytes { buffer in
+            write(fd, buffer.baseAddress, sendData.count)
+        }
+        
+        guard bytesWritten == sendData.count else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -16, userInfo: [NSLocalizedDescriptionKey: "寫入 StartService 失敗"])
+        }
+        
+        var lenBuffer = [UInt8](repeating: 0, count: 4)
+        let lenRead = read(fd, &lenBuffer, 4)
+        guard lenRead == 4 else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -17, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 回應長度失敗"])
+        }
+        
+        let responseLength = lenBuffer.withUnsafeBytes { buffer in
+            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+        }
+        
+        guard responseLength > 0 && responseLength < 1_000_000 else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -18, userInfo: [NSLocalizedDescriptionKey: "無效的 StartService 回應長度"])
+        }
+        
+        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
+        var totalBytesRead = 0
+        while totalBytesRead < Int(responseLength) {
+            let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
+            if readChunk <= 0 {
+                close(fd)
+                throw NSError(domain: "DeviceManager", code: -19, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 數據中斷"])
+            }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+            close(fd)
+            throw NSError(domain: "DeviceManager", code: -20, userInfo: [NSLocalizedDescriptionKey: "解析 StartService 回應失敗"])
+        }
+        
+        guard let servicePort = plist["Port"] as? Int else {
+            close(fd)
+            if let errorMsg = plist["Error"] as? String {
+                throw NSError(domain: "DeviceManager", code: -21, userInfo: [NSLocalizedDescriptionKey: "啟動定位服務失敗：\(errorMsg)"])
+            }
+            throw NSError(domain: "DeviceManager", code: -22, userInfo: [NSLocalizedDescriptionKey: "StartService 未返回 Port 號"])
+        }
+        
+        close(fd)
+        self.appendLog("成功在設備上啟動 com.apple.dt.simulatelocation 服務 (埠號: \(servicePort))")
+        
+        // -------------------------------------------------------------
+        // 步驟 2: 再次連接 usbmuxd，穿透到剛才啟動的定位服務 Port
+        // -------------------------------------------------------------
+        self.appendLog("正在建立定位服務之穿透 Socket (Port: \(servicePort))...")
+        let serviceFd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard serviceFd >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -23, userInfo: [NSLocalizedDescriptionKey: "無法創建第二個 Unix Socket"])
+        }
+        
+        setsockopt(serviceFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(serviceFd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        
+        let serviceConnectRes = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.connect(serviceFd, sockaddrPointer, socklen_t(addrSize))
+            }
+        }
+        
+        guard serviceConnectRes >= 0 else {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -24, userInfo: [NSLocalizedDescriptionKey: "無法再次連接到本地 usbmuxd"])
+        }
+        
+        let portNumber = Int(CFSwapInt16HostToBig(UInt16(servicePort)))
+        let connectServicePlist: [String: Any] = [
+            "ClientVersionString": "flyflyfly",
+            "DeviceID": deviceID,
+            "PortNumber": portNumber,
+            "MessageType": "Connect",
+            "ProgName": "flyflyfly"
+        ]
+        
+        guard sendUsbmuxPlist(serviceFd, plist: connectServicePlist, tag: 200) else {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -25, userInfo: [NSLocalizedDescriptionKey: "發送 usbmux Connect 定位服務失敗"])
+        }
+        
+        guard let serviceConnResult = readUsbmuxResponse(serviceFd, timeoutSeconds: 3) else {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -26, userInfo: [NSLocalizedDescriptionKey: "讀取 usbmux Connect 定位服務回應失敗"])
+        }
+        
+        if let number = serviceConnResult["Number"] as? Int, number != 0 {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -27, userInfo: [NSLocalizedDescriptionKey: "usbmuxd 拒絕穿透定位服務 (代碼: \(number))"])
+        }
+        
+        self.appendLog("定位服務穿透成功！Socket 已接通。")
+        return serviceFd
+    }
+
+    private struct UsbmuxHeader {
+        var length: UInt32
+        var version: UInt32
+        var type: UInt32
+        var tag: UInt32
+    }
+    
+    private func sendUsbmuxPlist(_ socketFd: Int32, plist: [String: Any], tag: UInt32) -> Bool {
+        guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
+            return false
+        }
+        
+        let headerLength = MemoryLayout<UsbmuxHeader>.size
+        let totalLength = headerLength + plistData.count
+        
+        var header = UsbmuxHeader(
+            length: UInt32(totalLength),
+            version: 1,
+            type: 8,
+            tag: tag
+        )
+        
+        var data = Data()
+        withUnsafePointer(to: &header) { pointer in
+            data.append(UnsafeBufferPointer(start: pointer, count: 1))
+        }
+        data.append(plistData)
+        
+        let bytesWritten = data.withUnsafeBytes { buffer in
+            write(socketFd, buffer.baseAddress, data.count)
+        }
+        
+        return bytesWritten == data.count
+    }
+    
+    private func readUsbmuxResponse(_ socketFd: Int32, timeoutSeconds: Int) -> [String: Any]? {
+        let headerLength = MemoryLayout<UsbmuxHeader>.size
+        var headerBuffer = [UInt8](repeating: 0, count: headerLength)
+        
+        let bytesRead = read(socketFd, &headerBuffer, headerLength)
+        guard bytesRead == headerLength else { return nil }
+        
+        let header = headerBuffer.withUnsafeBytes { buffer in
+            buffer.load(as: UsbmuxHeader.self)
+        }
+        
+        let payloadLength = Int(header.length) - headerLength
+        guard payloadLength > 0 else { return nil }
+        
+        var payloadBuffer = [UInt8](repeating: 0, count: payloadLength)
+        var totalBytesRead = 0
+        while totalBytesRead < payloadLength {
+            let readChunk = read(socketFd, &payloadBuffer[totalBytesRead], payloadLength - totalBytesRead)
+            if readChunk <= 0 {
+                return nil
+            }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+            return nil
+        }
+        
+        return plist
     }
 
     private func manualEndpointIfValid() -> Endpoint? {
@@ -421,12 +724,14 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         // 若偵測到新設備插入，且當前未連線、未正在連線、且開啟了「自動偵測」
         guard isAutoConnectEnabled else { return }
         guard !isConnected && !isConnecting else { return }
-        guard manualEndpointIfValid() != nil else { return }
         
-        if !newDevices.isEmpty {
-            appendLog("即插即連：偵測到 iOS 裝置已接入，自動啟動連線流程...")
-            Task {
-                await connectDeviceInternal(autoTriggered: false, force: true)
+        let hasLegacyDevice = newDevices.contains(where: { isVersionLegacy($0.productVersion ?? "15.0") })
+        if hasLegacyDevice || manualEndpointIfValid() != nil {
+            if !newDevices.isEmpty {
+                appendLog("即插即連：偵測到 iOS 裝置已接入，自動啟動連線流程...")
+                Task {
+                    await connectDeviceInternal(autoTriggered: false, force: true)
+                }
             }
         }
     }
@@ -531,7 +836,8 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 if self.pendingCoordinate != nil { self.flushLatestCoordinate() }
             }
 
-            guard self.rsdEndpoint != nil else {
+            let isLegacy = self.connectedVersion.map { self.isVersionLegacy($0) } ?? false
+            if !isLegacy && self.rsdEndpoint == nil {
                 self.setConnectionState(.failed, deviceName: "RSD 未就緒，請重連", lastError: "RSD 未就緒")
                 return
             }
@@ -618,6 +924,12 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }
 
     private func startSystemMonitoring() {
+        if let ver = connectedVersion, isVersionLegacy(ver) {
+            // Legacy 裝置已經在 connectDeviceInternal 啟動好了，直接返回
+            print("[DeviceManager] Legacy 效能監控與定位服務已就緒，無需重新啟動")
+            return
+        }
+        
         stopSystemMonitoring()
         
         guard let udid = connectedUDID else { return }
@@ -697,6 +1009,38 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     }
 
     private func sendCoordinate(latitude: Double, longitude: Double) async throws {
+        if let ver = connectedVersion, isVersionLegacy(ver) {
+            if !dvtStream.isRunning {
+                try dvtStream.start(
+                    host: "localhost",
+                    port: "0",
+                    onOutput: { [weak self] text in
+                        guard let self = self else { return }
+                        let summarized = self.summarizeOutput(text, maxChars: 180)
+                        Task { @MainActor in self.appendLog("dvt-stream: \(summarized)") }
+                    },
+                    onError: { [weak self] text in
+                        guard let self = self else { return }
+                        let summarized = self.summarizeOutput(text, maxChars: 180)
+                        Task { @MainActor in self.appendLog("dvt-stream err: \(summarized)") }
+                    },
+                    onExit: { [weak self] status in
+                        guard let self = self else { return }
+                        Task { @MainActor in
+                            self.appendLog("dvt-stream exited: \(status)")
+                            if self.expectedDvtStreamExit {
+                                self.expectedDvtStreamExit = false
+                                return
+                            }
+                            self.handleUnexpectedConnectionLoss(reason: "定位串流已中斷（code: \(status)）")
+                        }
+                    }
+                )
+            }
+            try dvtStream.send(latitude: latitude, longitude: longitude)
+            return
+        }
+
         guard let ep = rsdEndpoint else {
             throw NSError(domain: "DeviceManager", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "RSD 未就緒"
