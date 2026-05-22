@@ -67,6 +67,23 @@ struct DeviceStatusSectionView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .disabled(vm.deviceManager.isConnecting)
+            
+            if isWirelessMode {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "shield.lamppost.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 11))
+                    Text("安全提示：無線 TLS 連線跳過了設備自簽名憑證驗證。請確保您處於受信賴的局域網環境，避免在公用 Wi-Fi 使用以防中間人攻擊。")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(6)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(6)
+                .transition(.opacity)
+            }
 
             // Auto-Connect Toggle
             Toggle(isOn: $vm.isAutoConnectEnabled) {

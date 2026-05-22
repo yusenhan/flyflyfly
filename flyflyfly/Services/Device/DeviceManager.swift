@@ -757,93 +757,29 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             
         appendRepairLog("[START] 開始執行一鍵修復環境...")
         
-        let scriptPath: String
-        if let resourcesURL = Bundle.main.resourceURL {
-            scriptPath = resourcesURL.appendingPathComponent("repair-environment.sh").path
-        } else {
-            scriptPath = "./scripts/repair-environment.sh"
-        }
-        
-        let fileManager = FileManager.default
-        let resolvedPath: String
-        if fileManager.fileExists(atPath: scriptPath) {
-            resolvedPath = scriptPath
-        } else {
-            // 嘗試動態從專案原始碼相對路徑解析 (供開發期 Xcode 運行時的 fallback 尋找)
-            let sourceFile = #filePath
-            let sourceURL = URL(fileURLWithPath: sourceFile)
-            let devPath = sourceURL
-                .deletingLastPathComponent() // Device
-                .deletingLastPathComponent() // Services
-                .deletingLastPathComponent() // flyflyfly
-                .deletingLastPathComponent() // 專案根目錄
-                .appendingPathComponent("scripts")
-                .appendingPathComponent("repair-environment.sh")
-                .path
-            
-            if fileManager.fileExists(atPath: devPath) {
-                resolvedPath = devPath
-            } else {
-                appendRepairLog("[ERROR] 找不到修復腳本：\(scriptPath)")
-                flushPendingRepairLogs()
-                repairTimer?.cancel()
-                repairTimer = nil
-                isRepairing = false
-                return
-            }
-        }
-        
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [resolvedPath]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        
-        let fileHandle = pipe.fileHandleForReading
-        fileHandle.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            if let line = String(data: data, encoding: .utf8) {
-                let lines = line.components(separatedBy: .newlines)
-                for l in lines {
-                    let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        self?.appendRepairLog(trimmed)
-                    }
-                }
-            }
-        }
-        
         do {
-            try process.run()
+            try await Task.sleep(nanoseconds: 200_000_000)
+            appendRepairLog("[INFO] 正在重置本地 USBMux 監聽服務...")
             
-            while process.isRunning {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-            }
+            // 安全重啟內部的 USBMuxMonitor 連接
+            usbmuxMonitor.stopMonitoring()
+            try await Task.sleep(nanoseconds: 400_000_000)
+            usbmuxMonitor.startMonitoring()
             
-            fileHandle.readabilityHandler = nil
-            if let lastData = try? fileHandle.readToEnd(), !lastData.isEmpty {
-                if let line = String(data: lastData, encoding: .utf8) {
-                    let lines = line.components(separatedBy: .newlines)
-                    for l in lines {
-                        let trimmed = l.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            self.appendRepairLog(trimmed)
-                        }
-                    }
-                }
-            }
+            appendRepairLog("[SUCCESS] 本地 USBMux 監聽轉發器已成功重啟！")
+            try await Task.sleep(nanoseconds: 200_000_000)
             
-            let status = process.terminationStatus
-            if status == 0 {
-                appendRepairLog("[SUCCESS] 修復已順利完成！")
-            } else {
-                appendRepairLog("[ERROR] 修復腳本執行出錯，結束代碼：\(status)")
-            }
+            appendRepairLog("[INFO] 指引：若設備仍未被識別，請手動確認以下事項：")
+            appendRepairLog("  1. 請拔掉 iPhone 的 USB 數據線，等待 3 秒後重新插入。")
+            appendRepairLog("  2. 請解鎖 iPhone，並在「信任此電腦」對話框中點選「信任」並輸入密碼。")
+            appendRepairLog("  3. 確保使用支援數據傳輸的原廠或優質傳輸線。")
+            appendRepairLog("  4. 由於 macOS 沙盒與安全限制，App 無法透過管理員權限強行重啟系統 usbmuxd。")
+            appendRepairLog("  5. 若問題依舊，請嘗試重啟 iPhone 或重啟 Mac 電腦。")
+            
+            try await Task.sleep(nanoseconds: 200_000_000)
+            appendRepairLog("[SUCCESS] 一鍵修復環境程序執行完畢！")
         } catch {
-            appendRepairLog("[ERROR] 無法執行修復腳本：\(error.localizedDescription)")
+            appendRepairLog("[ERROR] 修復過程遭遇非預期錯誤：\(error.localizedDescription)")
         }
         
         // 確保把剩餘的日誌都刷出來
