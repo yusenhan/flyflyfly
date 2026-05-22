@@ -127,7 +127,12 @@ graph TD
 *   **[Functional Specification (FSD)](./docs/FunctionalSpecification.md)**: Product features and user scenarios.
 *   **[System Design (SD)](./docs/SystemDesign.md)**: Native Swift architecture, socket penetration, and optimization details.
 
----
+## ⚖️ Open Source Attribution & Disclaimer
 
-## ⚖️ Disclaimer
-This tool is intended for educational, development testing, and personal privacy protection purposes only. Users assume all responsibility and liability for compliance with third-party service terms and local regulations.
+This project is an open-source implementation created strictly for academic research, technological exploration, and educational purposes. The core concepts are referenced and adapted from the open-source project [O.paperclip](https://github.com/agocia/O.paperclip). On top of the original work, this project has been deeply refactored into native Swift, performance-optimized, and security-hardened utilizing advanced Artificial Intelligence (AI) technologies.
+
+This project is an independent research initiative and shares no commercial association, affiliation, endorsement, or partnership with the original project's authors.
+
+**Important Notice to All Users**:
+- This software is strictly intended for developmental debugging, academic study, educational analysis, and personal privacy protection. Do NOT use this tool for any commercial purposes that violate third-party terms of service, applicable laws, or local regulations.
+- The authors and contributors of this project do not condone, support, or encourage any inappropriate or illegal usage. Users assume sole and full responsibility for all risks and legal liabilities (including but not limited to penalties under third-party terms of service) arising from the use of this software.
