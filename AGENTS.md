@@ -1,12 +1,12 @@
 # flyflyfly — Project Knowledge Base
 
-**Generated:** 2026-04-07
-**Commit:** Current State (Fixed Missing Extensions)
+**Generated:** 2026-05-22
+**Commit:** Native Swift Architecture (DTX + USBMux)
 **Branch:** main
 
 ## OVERVIEW
 
-macOS SwiftUI app that spoofs iOS device GPS location via `pymobiledevice3`. Connects to iPhone/iPad over USB or Wi-Fi tunnel, then injects simulated coordinates through DVT instruments or legacy `simulate-location` CLI. Supports A→B route following, fixed-point pinning, multi-waypoint routes, and KML-based "PurePoint" overlay import.
+macOS SwiftUI app that spoofs iOS device GPS location. It utilizes a **100% self-developed, highly efficient, pure Swift native DTX protocol and USBMux Socket penetration architecture**, successfully eliminating all dependencies on external Python background processes (`pymobiledevice3`), external binary tools (`dvt-location-stream`), and C++ wrappers (`FastMotionEngineWrapper`).
 
 ## STRUCTURE
 
@@ -31,8 +31,11 @@ flyflyfly/
 │       └── LocationSearching.swift
 ├── Services/
 │   ├── Device/
-│   │   ├── DeviceManager.swift      # Orchestrates pymobiledevice3 and tunnel mgmt
-│   │   ├── DVTLocationStream.swift  # Process wrapper for dvt-location-stream binary
+│   │   ├── USBMuxMonitor.swift      # [NEW] Native Swift USBMux hotplug & lockdownd extractor
+│   │   ├── DTXMessage.swift         # [NEW] Pure Swift DTX protocol frame encoder/decoder
+│   │   ├── DTXClient.swift          # [NEW] Pure Swift DTX client (Sysmontap + LocationSimulation)
+│   │   ├── DeviceManager.swift      # Orchestrates USBMuxMonitor, DTXClient, and connection state
+│   │   ├── DVTLocationStream.swift  # [REWRITTEN] Swift-native adapter bridging to DTXClient Channel 2
 │   │   └── MockDVTLocationStream.swift
 │   ├── Diagnostics/
 │   │   └── AppDiagnostics.swift     # Crash monitoring and session logging
@@ -48,25 +51,35 @@ flyflyfly/
     ├── Search/
     ├── Shared/
     └── Sidebar/
-bundled/
-├── dvt-location-stream              # Binary tool for DVT injection
-└── pymobiledevice3                  # Bundled CLI binary
 ```
 
-## KEY FIXES
+## NATIVE SWIFT REVOLUTION (2026-05)
 
-- **Missing Extensions (2026-04-07):** Restored `MKMapItem` and `CLPlacemark` extensions (including `location`, `address`, `shortAddress`, `fullAddress`) and implemented `AddressRepresentations` to fix build failures. Located in `Core/Models/MapKit+Extensions.swift`.
+1. **Native Device Detection (USBMuxMonitor):**
+   - Connects directly to `/var/run/usbmuxd` Domain Socket, natively listening to USB attached/detached events.
+   - Extracts device attributes (`DeviceName`, `ProductType`, `ProductVersion`) via `lockdownd` (Port 62078), achieving millisecond-level plug-and-play responsiveness.
+2. **Native Performance Monitoring & DTX Protocol (DTXMessage & DTXClient):**
+   - Decodes 32-byte DTXHeader, 16-byte PayloadHeader, and DTX Primitive types.
+   - Operates a Swift-native client over TLS (`NWConnection`) or raw Socket fd, registering Channel 1 (`sysmontap`) to natively stream real-time CPU & RAM footprint metrics.
+3. **Native Location Simulation (DTX Multiplexing):**
+   - Registers Channel 2 pointing to the private `coreservices.LocationSimulation` service over the same underlying connection.
+   - Implements native `simulateLocation(latitude:longitude:)` and `stopLocationSimulation()` RPCs.
+   - **Key Fix:** Coordinates are wrapped inside `NSNumber` objects and serialized as binary Plist Data via `NSKeyedArchiver` to match the exact expected parameter signature (`-(void)simulateLocationWithLatitude:(NSNumber *)lat longitude:(NSNumber *)lon`). They are transmitted as DTX `Buffer` objects (TypeTag = 2).
+4. **Adapter Mode for Location Stream (DVTLocationStream):**
+   - Rewritten as a clean Swift adapter holding a weak reference to `DTXClient`. 
+   - Dispatches coordinate mock requests asynchronously using Swift `Task` on background threads to ensure zero UI stutter.
+5. **Zero External Dependency:**
+   - No Python runtime (`pymobiledevice3`) or helper binaries (`dvt-location-stream`) are needed for runtime operations.
+   - "Clear simulation" is achieved entirely natively via DTX RPC without spawning sub-processes.
 
 ## CONVENTIONS
 
 - **Language**: All UI strings in Traditional Chinese (zh-TW). Code comments in Chinese/English.
 - **Architecture**: Decoupled into `Core`, `Services`, and `UI`. `ContentView` uses `@StateObject` for `AppViewModel`.
-- **Concurrency**: `@MainActor` on ViewModels. `DeviceManager` uses `DispatchQueue` and `NSLock` for thread safety.
-- **Process Management**: `Process` + `Pipe` for CLI tools.
+- **Concurrency**: `@MainActor` on ViewModels. Thread-safety managed via GCD queues and locks.
 - **Builds**: 所有的建置（Builds）都必須同時編譯 Debug 與 Release 兩個版本，以確保兩種配置下的代碼均能正常編譯無誤。
-
 
 ## NOTES
 
-- The app depends on bundled binaries in the `bundled/` directory.
+- The binaries in `bundled/` are now entirely deprecated for the DVT mode but kept for fallback or backward compatibility.
 - `Item.swift` remains as a SwiftData placeholder but is currently unused.

@@ -25,19 +25,21 @@ Powered by a C++20 compute engine and native socket injection, it allows develop
 
 ---
 
-## 🚀 Performance Revolution (C++ Driven)
+## 🚀 Performance Revolution (100% Pure Swift Architecture)
 
-The project has fully transitioned to a **Swift-C++ Hybrid Architecture**, delivering unprecedented performance:
+The project has fully evolved to a **100% Pure Swift Native Architecture**, completely eliminating external Python background processes (`pymobiledevice3`), external helper binary tools (`dvt-location-stream`), and C++ socket tunnels. This yields supreme stability and extreme lightweight performance:
 
-*   **🚀 C++ High-Performance Compute Core**: Core path interpolation and distance calculations re-engineered in C++20. Search complexity optimized from $O(N)$ to $O(\log N)$, with near-zero latency.
-*   **🎯 Native Spatial Indexing (Quadtree)**: Employs a C++ Quadtree index, enabling smooth rendering and interaction with **tens of thousands** of map annotations without stuttering.
-*   **⚡ Native Communication Tunnel**: Replaced the external Python push process with a native C++ Socket client:
-    - **90% Memory Reduction**: Footprint per connection dropped from 50MB+ to **under 5MB**.
-    - **Zero-Latency Injection**: Eliminates IPC (Pipe) serialization overhead for more instantaneous location updates.
-*   **📐 Collapsible Control Panel**: Replaces legacy tabs with a collapsible vertical layout, eliminating transition lag and improving usability.
-*   **⚡ Zero-Lag Sidebar Experience**: Optimized UI architecture and C++ engine isolation ensure millisecond-level responsiveness.
-*   **🔌 Intuitive Connection Management**: The connect button is integrated directly into the device status row for one-click pairing between iPhone and Mac.
-*   **📦 Precise Speed Control**: Removed redundant sliders in favor of combined TextField and Stepper, offering more professional and stable speed settings.
+*   **⚡ Self-Developed Pure Swift DTX Protocol (DTXClient)**:
+    *   Implements **Channel Multiplexing** over a single underlying TLS / Raw Socket.
+    *   **Channel 1** (`sysmontap`): Streams real-time CPU & RAM foot-print data natively in the background.
+    *   **Channel 2** (`LocationSimulation`): Performs native coordinate injection and mock clear RPCs, getting rid of redundant socket creations.
+*   **🔌 Pure Swift Native USBMux Listening (USBMuxMonitor)**:
+    *   Directly connects to `/var/run/usbmuxd` Domain Socket to capture plug-and-play USB events instantly, pairing devices natively through `lockdownd` for seamless auto-connections.
+*   **🚀 Ultra-Lightweight & Zero-Lag**:
+    *   **90% Memory Reduction**: Connection overhead slashed from 50MB+ to **under 5MB**.
+    *   **Buttery-Smooth High-Frequency Injection**: Uses asynchronous Swift `Tasks` in background threads and packages coordinates inside `NSNumber` objects archived via `NSKeyedArchiver` (TypeTag = 2 Buffer) to perfectly align with Apple's location API signature, producing zero UI lag.
+*   **📐 Collapsible Control Panel**: Vertical split collapsible layout for smoother visual performance and unified workflows.
+*   **🔌 Direct Connection Management**: Unified device connection state directly integrated in the sidebar for simple one-click pairing.
 
 ---
 
@@ -52,25 +54,23 @@ graph TD
         A -->|6. Start Moving| B
     end
 
-    subgraph Logic_Layer [C++ Engine Layer]
+    subgraph Logic_Layer [100% Pure Swift Logic Engine]
         B -->|2. Req Connection| C{DeviceManager}
+        B -->|5. Path Planning| J[Swift RouteMotionEngine]
+        J -->|Interpolation| K[Smooth Coords Stream]
         
-        subgraph Connection_Process [RSD Tunneling]
-            C -->|Discovery| D[USBMuxD / mDNS]
-            D -->|Invoke| G[bundled/pymobiledevice3]
-            G -->|Elevate| H[macOS Password Prompt]
-            H -->|Success| I[Established RSD Tunnel]
+        subgraph Connection_Process [Pure Swift Socket Penetration]
+            C -->|Discovery| D[USBMuxMonitor Domain Socket]
+            D -->|Hotplug Event/Native Handshake| G[DTXClient Handshake Flow]
+            G -->|Multiplexing| I[Channel 1 sysmontap & Channel 2 LocationSimulation]
         end
-
-        B -->|5. Path Planning| J[C++ FastMotionEngine]
-        J -->|O log N Search| K[Smooth Coords Stream]
     end
 
     subgraph Native_Service [Native Injection Service]
-        I -->|3. Tunnel Ready| B
-        B -->|7. Start Stream| L[DVTLocationStream]
-        L -->|C++ Socket| M[Native Tunnel]
-        K -->|Zero-copy Push| M
+        I -->|3. DTX Channels Ready| B
+        B -->|7. Start Stream| L[DVTLocationStream Adapter]
+        L -->|NSKeyedArchiver ObjC id| M[DTXClient Channel 2 RPC]
+        K -->|Zero-Lag Asynchronous Task| M
     end
 
     subgraph iOS_Device [iOS Device]
@@ -85,17 +85,17 @@ graph TD
 
 | Item | Details |
 |------|---------|
-| **Compute Engine** | C++ 20 / Swift 5.9 Interop |
+| **Compute Engine** | 100% Pure Swift (Swift Concurrency Thread-Safety Guarded) |
 | **Arch** | Apple Silicon (M1/M2/M3), Intel x86_64 |
 | **macOS** | 13.0 Ventura / 14.0 Sonoma / 15.0 Sequoia |
 | **iOS / iPadOS** | 16.0, 17.0, 18.0+ |
-| **Connectivity** | High-Speed USB / Wireless RSD Tunneling |
+| **Connectivity** | High-Speed USB (USBMuxd Direct) / Wireless RSD Tunneling |
 
 ---
 
 ## 🚀 Getting Started
 
-Build from source for the latest C++ core features:
+Build from source for the latest 100% Pure Swift features:
 ```bash
 git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly

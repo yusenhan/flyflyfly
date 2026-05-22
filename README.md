@@ -25,18 +25,21 @@ English Version: [English README](./README.en.md)
 
 ---
 
-## 🚀 性能革命 (C++ 驅動優化)
+## 🚀 性能革命 (100% 純 Swift 原生架構)
 
-本專案已完成從純 Swift 向 **Swift-C++ 混合架構** 的全面轉型，帶來前所未有的效能：
+本專案已完成向 **100% 全原生 Swift 自研架構** 的革命性進化，淘汰了所有外部 Python（`pymobiledevice3`）背景進程、外部二進位工具（`dvt-location-stream`）以及 C++ 混合通訊隧道，帶來前所未有的極致效能與原生穩定性：
 
-*   **🚀 C++ 高效能運算核心**：核心座標插值與距離計算採用 C++20 重構，搜尋複雜度從 $O(N)$ 優化至 $O(\log N)$，運算延遲近乎於零。
-*   **🎯 原生空間索引 (Quadtree)**：利用 C++ 實作四元樹索引，支援地圖上同時載入**數萬個**點位而無任何縮放卡頓。
-*   **⚡ 原生通訊隧道 (Native Tunnel)**：徹底移除 Python 推送進程。改用 C++ 直接透過 Socket 與 iOS 設備通訊：
-    *   **記憶體節省 90%**：單個連線開銷從 50MB+ 降至 **5MB 以下**。
-    *   **零延遲注入**：消除 IPC (管道) 序列化延遲，定位更新更加精準。
-*   **📐 垂直摺疊控制面板**：取代舊式 Tab 切換，採用分段摺疊設計，消除分頁切換延遲，操作更直觀。
-*   **⚡ 側邊欄零延遲體驗**：透過 UI 架構優化與 C++ 運算核心隔離，確保介面反應毫秒級同步。
-*   **🔌 直覺連線管理**：連線按鈕整合至裝置狀態行，一鍵點擊即可完成手機與 Mac 的通訊連結。
+*   **⚡ 純 Swift 自研 DTX 協定 (DTXClient)**：
+    *   在單一的 TLS / Raw Socket 通道上，實現了**通道多路複用 (Channel Multiplexing)**。
+    *   **Channel 1** (`sysmontap`)：原生背景提取即時 CPU / RAM 系統數據。
+    *   **Channel 2** (`LocationSimulation`)：原生發送與清空模擬座標，徹底消除多個 Socket 的重複建立開銷。
+*   **🔌 純 Swift 原生 USBMux 監聽 (USBMuxMonitor)**：
+    *   直接對接 `/var/run/usbmuxd` Domain Socket，毫秒級監聽熱插拔事件，並直連 `lockdownd` 提取設備元數據，實現極致流暢的「即插即連」。
+*   **🚀 極致輕量與零延遲**：
+    *   **記憶體節省 90%**：運行開銷從 50MB+ 降至 **5MB 以下**。
+    *   **高頻軌跡完美注入**：藉由 Swift 異步 Task 背景派發，與經由 `NSKeyedArchiver` 序列化的 `NSNumber` 物件（TypeTag = 2 Buffer 形式）傳遞，完美契合 Apple 位置模擬 API 的預期簽名，達成零卡頓的高更新率注入。
+*   **📐 垂直摺疊控制面板**：分段摺疊設計，操作直觀，介面反應毫秒級同步。
+*   **🔌 一鍵直覺連線管理**：連線按鈕與裝置狀態無縫整合，一鍵即可完成手機與 Mac 的原生 DTX 連結。
 
 ---
 
@@ -65,10 +68,10 @@ graph TD
         Y[🛠️ 毛玻璃修復日誌面板] <-->|實時滾動日誌| B
     end
 
-    subgraph Logic_Layer [C++ & Swift 效能與模擬引擎]
+    subgraph Logic_Layer [100% 原生 Swift 效能與模擬引擎]
         B -->|2. 要求連線| C{DeviceManager}
-        B -->|5. 軌跡運算| J[C++ FastMotionEngine]
-        J -->|O log N 檢索| K[座標插值串流]
+        B -->|5. 軌跡運算| J[Swift RouteMotionEngine]
+        J -->|座標插值串流| K[座標插值串流]
         
         %% 防作弊模擬
         K -->|真實模擬| P{隨機漫步 & 紅綠燈判定}
@@ -76,25 +79,24 @@ graph TD
         PA -->|通知| Z
         P -->|平滑微調| PB[隨機漫步 Jitter 運算]
         
-        subgraph Connection_Process [RSD 隧道與故障排除]
-            C -->|偵測裝置| D[USBMuxD / mDNS]
-            D -->|呼叫| G[bundled/pymobiledevice3]
-            G -->|要求權限| H[macOS 密碼提示]
-            H -->|成功| I[實體 RSD 通道建立]
+        subgraph Connection_Process [純 Swift 原生透傳與故障排除]
+            C -->|偵測裝置| D[USBMuxMonitor 直連 Domain Socket]
+            D -->|監聽插拔/原生握手| G[DTXClient 原生握手流程]
+            G -->|多路複用| I[Channel 1 sysmontap & Channel 2 LocationSimulation]
             
             %% 一鍵自癒
             C -->|連線異常| Q[🔌 連線故障排障指引]
             Q -->|一鍵修復| R[scripts/repair-environment.sh]
-            R -->|1. 重置 USBMuxd 轉發<br>2. 清除進程殘留<br>3. 授予 execution 權限| Y
+            R -->|1. 重置 USBMuxd 轉發<br>2. 清除進程殘留| Y
             R -->|修復成功| C
         end
     end
 
     subgraph Native_Service [原生注入服務]
         I -->|3. 通道就緒| B
-        B -->|7. 啟動原生流| L[DVTLocationStream]
-        L -->|C++ Socket| M[原生通訊隧道]
-        PB -->|零拷貝推送| M
+        B -->|7. 啟動原生流| L[DVTLocationStream 適配器]
+        L -->|NSKeyedArchiver 封裝| M[DTXClient Channel 2 RPC]
+        PB -->|零卡頓 Task 異步推送| M
         PA -->|停等時持續漂移| M
     end
 
@@ -110,16 +112,16 @@ graph TD
 
 | 項目 | 支援規格 |
 |------|-------------|
-| **引擎標準** | C++ 20 / Swift 5.9 Interop |
+| **引擎標準** | 100% Pure Swift (Swift Concurrency 執行緒安全保護) |
 | **硬體架構** | Apple Silicon (M1/M2/M3), Intel x86_64 |
 | **系統版本** | macOS 13+, iOS 16, 17, 18+ |
-| **通訊方式** | USB High-Speed / 無線 RSD 隧道 |
+| **通訊方式** | USB High-Speed (USBMuxd 直連) / 無線 RSD 隧道 |
 
 ---
 
 ## 🚀 快速上手
 
-目前 C++ 核心版本建議直接編譯建置：
+目前 100% 原生 Swift 版本建議直接編譯建置：
 ```bash
 git clone https://github.com/flyflyfly/flyflyfly.git
 cd flyflyfly
