@@ -445,13 +445,29 @@ public class DTXClient: @unchecked Sendable {
         guard isRunning else {
             throw NSError(domain: "DTXClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "DTXClient 未連線"])
         }
+        
+        // 將 Double 包裝為 NSNumber 物件
+        let latNum = NSNumber(value: latitude)
+        let lonNum = NSNumber(value: longitude)
+        
+        // 使用 NSKeyedArchiver 序列化為 NSKeyedArchiver Data (ObjC id)
+        let latData: Data
+        let lonData: Data
+        if #available(macOS 10.13, *) {
+            latData = try NSKeyedArchiver.archivedData(withRootObject: latNum, requiringSecureCoding: false)
+            lonData = try NSKeyedArchiver.archivedData(withRootObject: lonNum, requiringSecureCoding: false)
+        } else {
+            latData = NSKeyedArchiver.archivedData(withRootObject: latNum)
+            lonData = NSKeyedArchiver.archivedData(withRootObject: lonNum)
+        }
+        
         let msg = try DTXMessage.makeMethodCall(
             identifier: getNextIdentifier(),
             channelCode: 2, // Channel 2
             selector: "simulateLocationWithLatitude:longitude:",
             arguments: [
-                .double(latitude),
-                .double(longitude)
+                .buffer(latData),
+                .buffer(lonData)
             ],
             expectsReply: true
         )
