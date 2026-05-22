@@ -36,6 +36,9 @@ public class USBMuxMonitor: ObservableObject {
     public init() {}
     
     public func startMonitoring() {
+        // Prevent SIGPIPE crashes across socket communication operations process-wide
+        signal(SIGPIPE, SIG_IGN)
+        
         lock.lock()
         defer { lock.unlock() }
         guard !isRunning else { return }
@@ -311,54 +314,6 @@ public class USBMuxMonitor: ObservableObject {
     // Fetch Lockdownd details (Port 62078)
     // ==============================================================================
     
-    private func fetchLockdownValue(fd: Int32, key: String) -> String? {
-        let request: [String: Any] = [
-            "Label": "flyflyfly",
-            "Request": "GetValue",
-            "Key": key
-        ]
-        
-        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: request, format: .xml, options: 0) else {
-            return nil
-        }
-        
-        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
-        var sendData = Data()
-        withUnsafePointer(to: &lengthHeader) { pointer in
-            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
-        }
-        sendData.append(reqData)
-        
-        let bytesWritten = sendData.withUnsafeBytes { buffer in
-            write(fd, buffer.baseAddress, sendData.count)
-        }
-        guard bytesWritten == sendData.count else { return nil }
-        
-        var lenBuffer = [UInt8](repeating: 0, count: 4)
-        let lenRead = read(fd, &lenBuffer, 4)
-        guard lenRead == 4 else { return nil }
-        
-        let responseLength = lenBuffer.withUnsafeBytes { buffer in
-            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
-        }
-        guard responseLength > 0 && responseLength < 1_000_000 else { return nil }
-        
-        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
-        var totalBytesRead = 0
-        while totalBytesRead < Int(responseLength) {
-            let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
-            if readChunk <= 0 { return nil }
-            totalBytesRead += readChunk
-        }
-        
-        let payloadData = Data(payloadBuffer)
-        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
-            return nil
-        }
-        
-        return plist["Value"] as? String
-    }
-    
     private func fetchLockdownDetails(deviceID: Int) -> [String: String] {
         var details: [String: String] = [:]
         let socketPath = "/var/run/usbmuxd"
@@ -366,6 +321,9 @@ public class USBMuxMonitor: ObservableObject {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return details }
         defer { close(fd) }
+        
+        // Prevent SIGPIPE crashes during lockdown socket communication
+        signal(SIGPIPE, SIG_IGN)
         
         // Set brief timeout for the entire handshake
         var tv = timeval()
@@ -413,19 +371,67 @@ public class USBMuxMonitor: ObservableObject {
         }
         
         // Socket is now a direct tunnel to lockdownd!
-        // We fetch only the four specific, non-sensitive keys to avoid over-fetching
-        // sensitive information such as SerialNumber, WiFiAddress, or BluetoothAddress.
-        if let deviceClass = fetchLockdownValue(fd: fd, key: "DeviceClass") {
-            details["DeviceClass"] = deviceClass
+        // Lockdownd protocol: 4-byte big-endian length header, followed by XML plist.
+        // We send a single unkeyed GetValue request. This is extremely robust and performs
+        // only 1 read/write roundtrip, preventing lockdownd from abruptly resetting the socket
+        // and avoiding EPIPE/SIGPIPE crashes.
+        let lockdowndRequest: [String: Any] = [
+            "Label": "flyflyfly",
+            "Request": "GetValue"
+        ]
+        
+        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: lockdowndRequest, format: .xml, options: 0) else {
+            return details
         }
-        if let deviceName = fetchLockdownValue(fd: fd, key: "DeviceName") {
-            details["DeviceName"] = deviceName
+        
+        // Send length header (Big-endian UInt32)
+        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
+        var sendData = Data()
+        withUnsafePointer(to: &lengthHeader) { pointer in
+            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
         }
-        if let productType = fetchLockdownValue(fd: fd, key: "ProductType") {
-            details["ProductType"] = productType
+        sendData.append(reqData)
+        
+        let bytesWritten = sendData.withUnsafeBytes { buffer in
+            write(fd, buffer.baseAddress, sendData.count)
         }
-        if let productVersion = fetchLockdownValue(fd: fd, key: "ProductVersion") {
-            details["ProductVersion"] = productVersion
+        
+        guard bytesWritten == sendData.count else { return details }
+        
+        // Read Lockdownd response length header
+        var lenBuffer = [UInt8](repeating: 0, count: 4)
+        let lenRead = read(fd, &lenBuffer, 4)
+        guard lenRead == 4 else { return details }
+        
+        let responseLength = lenBuffer.withUnsafeBytes { buffer in
+            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+        }
+        
+        guard responseLength > 0 && responseLength < 1_000_000 else { return details } // Prevent huge memory allocation
+        
+        // Read Lockdownd XML plist payload
+        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
+        var totalBytesRead = 0
+        while totalBytesRead < Int(responseLength) {
+            let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
+            if readChunk <= 0 {
+                return details
+            }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+            return details
+        }
+        
+        // PRIVACY ENFORCEMENT: We extract ONLY the four specific, non-sensitive keys in memory
+        // and immediately discard the rest of the response to ensure complete privacy.
+        if let valueDict = plist["Value"] as? [String: Any] {
+            details["DeviceClass"] = valueDict["DeviceClass"] as? String
+            details["DeviceName"] = valueDict["DeviceName"] as? String
+            details["ProductType"] = valueDict["ProductType"] as? String
+            details["ProductVersion"] = valueDict["ProductVersion"] as? String
         }
         
         return details
