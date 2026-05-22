@@ -769,9 +769,20 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         if fileManager.fileExists(atPath: scriptPath) {
             resolvedPath = scriptPath
         } else {
-            let fallbackPath = "/Users/yusenhan/Code/flyflyfly/scripts/repair-environment.sh"
-            if fileManager.fileExists(atPath: fallbackPath) {
-                resolvedPath = fallbackPath
+            // 嘗試動態從專案原始碼相對路徑解析 (供開發期 Xcode 運行時的 fallback 尋找)
+            let sourceFile = #filePath
+            let sourceURL = URL(fileURLWithPath: sourceFile)
+            let devPath = sourceURL
+                .deletingLastPathComponent() // Device
+                .deletingLastPathComponent() // Services
+                .deletingLastPathComponent() // flyflyfly
+                .deletingLastPathComponent() // 專案根目錄
+                .appendingPathComponent("scripts")
+                .appendingPathComponent("repair-environment.sh")
+                .path
+            
+            if fileManager.fileExists(atPath: devPath) {
+                resolvedPath = devPath
             } else {
                 appendRepairLog("[ERROR] 找不到修復腳本：\(scriptPath)")
                 flushPendingRepairLogs()
