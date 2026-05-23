@@ -418,9 +418,9 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                     client.delegate = self
                     self.dtxClient = client
                     
-                    // 對於 Legacy 裝置，即便 StartService 回報 EnableServiceSSL，
-                    // 實測中通常不需要對服務 Socket 進行 SSL 升級，反而升級會導致斷開。
-                    try await client.startLegacy(socketFd: socketFd, identity: nil) // 傳入 nil 以禁用服務 SSL
+                    // 對於 Legacy 裝置，若 StartService 指示 EnableServiceSSL，我們應帶入 identity 進行握手。
+                    // 之前嘗試禁用 SSL 是為了排查 EOF，但若 iOS 強制要求 SSL，明文連線會直接被切斷。
+                    try await client.startLegacy(socketFd: socketFd, identity: identity)
                     self.dvtStream.setClient(client)
                     
                     self.setConnectionState(.connected, deviceName: "\(devName) (iOS \(ver))", lastError: nil)
@@ -872,7 +872,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             throw NSError(domain: "DeviceManager", code: -28, userInfo: [NSLocalizedDescriptionKey: "無法啟動定位模擬服務（Port 為空）"])
         }
         
-        close(currentFd)
+        // close(currentFd) // 核心修復：不能關閉啟動服務的 lockdownd 會話連線，否則 iOS 設備會自動關閉定位模擬服務並斷開 Socket！其生命週期交由外部的 legacyLockdownFd 變數持有並在斷開時由 terminateAllProcesses() 正確關閉。
         self.appendLog("成功在設備上啟動 com.apple.dt.simulatelocation 服務 (埠號: \(finalPort))")
         
         // -------------------------------------------------------------
@@ -1613,6 +1613,11 @@ extension DeviceManager: DTXClientDelegate {
         self.systemInfo.cpuUsage = cpu
         self.systemInfo.ramUsed = ram
         self.systemInfo.ramTotal = 8.0 // 估計的實體記憶體總量
+    }
+    
+    @MainActor
+    public func dtxClient(_ client: DTXClient, didLogMessage message: String) {
+        self.appendLog("Debug: \(message)")
     }
     
     @MainActor
