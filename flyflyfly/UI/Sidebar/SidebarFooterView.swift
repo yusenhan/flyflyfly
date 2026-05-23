@@ -35,7 +35,7 @@ struct SidebarFooterView: View {
                         Text("飛不飛都得飛")
                             .font(.caption)
                             .fontWeight(.semibold)
-                        Text("v0.99")
+                        Text("v0.99a")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
