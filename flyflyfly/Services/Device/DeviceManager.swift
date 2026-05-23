@@ -311,10 +311,12 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     func connectDeviceIfAvailable() {
         guard isAutoConnectEnabled else { return }
         guard !isConnected && !isConnecting else { return }
-        guard manualEndpointIfValid() != nil else { return }
+        
+        let devices = usbmuxMonitor.devices
+        let hasLegacyDevice = devices.contains(where: { isVersionLegacy($0.productVersion ?? "15.0") })
+        guard hasLegacyDevice || manualEndpointIfValid() != nil else { return }
         
         appendLog("啟動自動偵測：掃描已連線的 iOS 裝置...")
-        let devices = usbmuxMonitor.devices
         if !devices.isEmpty {
             appendLog("啟動自動偵測：偵測到 \(devices.count) 台 iOS 裝置，自動啟動連線流程")
             Task {
@@ -372,6 +374,11 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         do {
             // 優先檢查是否有已連接的 USBMux 實體設備
             let devices = usbmuxMonitor.devices
+            self.appendLog("Debug：當前 USBMux 偵測到的設備數量為 \(devices.count) 台")
+            for (idx, dev) in devices.enumerated() {
+                self.appendLog("Debug [\(idx)]: Name=\(dev.deviceName ?? "nil"), Ver=\(dev.productVersion ?? "nil"), UDID=\(dev.id), devID=\(dev.deviceID ?? 0)")
+            }
+            
             if let targetDevice = devices.first {
                 let ver = targetDevice.productVersion ?? "15.0"
                 let devName = targetDevice.deviceName ?? "iOS 裝置"
@@ -388,14 +395,14 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                     self.connectedVersion = ver
                     
                     // 1. 執行 USBMux 雙穿透，啟動定位模擬服務並獲取 socketFd
-                    let socketFd = try await connectLegacyDeviceLocationService(deviceID: devID)
+                    let (socketFd, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
                     
                     // 2. 啟動 dtxClient Legacy 模式
                     let client = DTXClient()
                     client.delegate = self
                     self.dtxClient = client
                     
-                    try await client.startLegacy(socketFd: socketFd)
+                    try await client.startLegacy(socketFd: socketFd, identity: identity)
                     self.dvtStream.setClient(client)
                     
                     self.setConnectionState(.connected, deviceName: "\(devName) (iOS \(ver))", lastError: nil)
@@ -436,22 +443,16 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
     }
 
-    private func connectLegacyDeviceLocationService(deviceID: Int) async throws -> Int32 {
+    private func fetchPairRecord(udid: String) -> [String: Any]? {
         let socketPath = "/var/run/usbmuxd"
-        
-        // -------------------------------------------------------------
-        // 步驟 1: 穿透 usbmuxd 連接 lockdownd 並發送 StartService
-        // -------------------------------------------------------------
-        self.appendLog("正在與 Lockdownd 握手以啟動定位服務...")
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else {
-            throw NSError(domain: "DeviceManager", code: -10, userInfo: [NSLocalizedDescriptionKey: "無法創建 Unix Socket"])
-        }
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
         
         signal(SIGPIPE, SIG_IGN)
         
         var tv = timeval()
-        tv.tv_sec = 4 // 4 秒超時
+        tv.tv_sec = 2
         tv.tv_usec = 0
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
@@ -474,6 +475,79 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             }
         }
         
+        guard connectRes >= 0 else { return nil }
+        
+        let plist: [String: Any] = [
+            "ClientVersionString": "flyflyfly",
+            "MessageType": "ReadPairRecord",
+            "PairRecordID": udid,
+            "ProgName": "flyflyfly"
+        ]
+        
+        guard sendUsbmuxPlist(fd, plist: plist, tag: 1) else { return nil }
+        guard let responsePlist = readUsbmuxResponse(fd, timeoutSeconds: 2) else { return nil }
+        
+        guard let pairRecordData = responsePlist["PairRecordData"] as? Data else {
+            return nil
+        }
+        
+        guard let pairRecordDict = try? PropertyListSerialization.propertyList(from: pairRecordData, options: [], format: nil) as? [String: Any] else {
+            return nil
+        }
+        
+        return pairRecordDict
+    }
+
+    private func connectLegacyDeviceLocationService(deviceID: Int, udid: String) async throws -> (Int32, SecIdentity?) {
+        let socketPath = "/var/run/usbmuxd"
+        let addrSize = MemoryLayout<sockaddr_un>.size
+        var addr = sockaddr_un()
+        addr.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        _ = withUnsafeMutablePointer(to: &addr.sun_path) { pointer in
+            let rawPointer = UnsafeMutableRawPointer(pointer).assumingMemoryBound(to: CChar.self)
+            for (i, byte) in pathBytes.enumerated() {
+                if i < 104 { rawPointer[i] = byte }
+            }
+        }
+        
+        var establishedIdentity: SecIdentity? = nil
+        
+        self.appendLog("Debug: 啟動 usbmux 連線穿透，DeviceID=\(deviceID)")
+        
+        // -------------------------------------------------------------
+        // 步驟 1: 穿透 usbmuxd 連接 lockdownd 並發送 StartService
+        // -------------------------------------------------------------
+        self.appendLog("正在與 Lockdownd 握手以啟動定位服務...")
+        self.appendLog("正在讀取設備配對記錄 (UDID: \(udid))...")
+        let pairRecord = fetchPairRecord(udid: udid)
+        if pairRecord != nil {
+            self.appendLog("成功獲取本機配對記錄。")
+        } else {
+            self.appendLog("未獲取到本機配對記錄，將嘗試無認證握手...")
+        }
+        
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw NSError(domain: "DeviceManager", code: -10, userInfo: [NSLocalizedDescriptionKey: "無法創建 Unix Socket"])
+        }
+        
+        signal(SIGPIPE, SIG_IGN)
+        
+        var tv = timeval()
+        tv.tv_sec = 4 // 4 秒超時
+        tv.tv_usec = 0
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        
+        let connectRes = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.connect(fd, sockaddrPointer, socklen_t(addrSize))
+            }
+        }
+        
+        self.appendLog("Debug: 本地 usbmuxd connect 回傳值=\(connectRes)")
         guard connectRes >= 0 else {
             close(fd)
             throw NSError(domain: "DeviceManager", code: -11, userInfo: [NSLocalizedDescriptionKey: "無法連接到本地 usbmuxd"])
@@ -487,6 +561,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             "ProgName": "flyflyfly"
         ]
         
+        self.appendLog("Debug: 發送 usbmux Connect 請求，目標 Port=62078")
         guard sendUsbmuxPlist(fd, plist: connectPlist, tag: 100) else {
             close(fd)
             throw NSError(domain: "DeviceManager", code: -12, userInfo: [NSLocalizedDescriptionKey: "發送 usbmux Connect 失敗"])
@@ -497,86 +572,297 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             throw NSError(domain: "DeviceManager", code: -13, userInfo: [NSLocalizedDescriptionKey: "讀取 usbmux Connect 回應失敗"])
         }
         
+        self.appendLog("Debug: usbmux Connect 回應 plist=\(connResult)")
         if let number = connResult["Number"] as? Int, number != 0 {
             close(fd)
             throw NSError(domain: "DeviceManager", code: -14, userInfo: [NSLocalizedDescriptionKey: "usbmuxd 拒絕連接 Lockdownd (代碼: \(number))"])
         }
         
+        // -------------------------------------------------------------
+        // 步驟 1-A: 發送 StartSession 建立 lockdownd 會話 (核心治本防護，帶有安全容錯降級)
+        // -------------------------------------------------------------
+        self.appendLog("正在與 Lockdownd 建立會話 (StartSession)...")
+        var currentFd = fd
+        var sessionSuccess = false
+        do {
+            var startSessionRequest: [String: Any] = [
+                "Label": "flyflyfly",
+                "Request": "StartSession"
+            ]
+            
+            if let record = pairRecord {
+                if let hostID = record["HostID"] as? String {
+                    startSessionRequest["HostID"] = hostID
+                    self.appendLog("Debug: 建立會話帶入 HostID=\(hostID)")
+                }
+                if let systemBUID = record["SystemBUID"] as? String {
+                    startSessionRequest["SystemBUID"] = systemBUID
+                    self.appendLog("Debug: 建立會話帶入 SystemBUID=\(systemBUID)")
+                } else if let buid = record["BUID"] as? String {
+                    startSessionRequest["SystemBUID"] = buid
+                    self.appendLog("Debug: 建立會話帶入 SystemBUID (BUID fallback)=\(buid)")
+                }
+            }
+            
+            guard let sessionReqData = try? PropertyListSerialization.data(fromPropertyList: startSessionRequest, format: .xml, options: 0) else {
+                throw NSError(domain: "DeviceManager", code: -30, userInfo: [NSLocalizedDescriptionKey: "無法序列化 StartSession 請求"])
+            }
+            
+            var sessionLenHeader = CFSwapInt32HostToBig(UInt32(sessionReqData.count))
+            var sessionSendData = Data()
+            withUnsafePointer(to: &sessionLenHeader) { pointer in
+                sessionSendData.append(UnsafeBufferPointer(start: pointer, count: 1))
+            }
+            sessionSendData.append(sessionReqData)
+            
+            self.appendLog("Debug: 寫入 StartSession 封包，長度=\(sessionReqData.count)")
+            let sessionBytesWritten = sessionSendData.withUnsafeBytes { buffer in
+                write(currentFd, buffer.baseAddress, sessionSendData.count)
+            }
+            
+            guard sessionBytesWritten == sessionSendData.count else {
+                throw NSError(domain: "DeviceManager", code: -31, userInfo: [NSLocalizedDescriptionKey: "寫入 StartSession 失敗"])
+            }
+            
+            var sessionLenBuffer = [UInt8](repeating: 0, count: 4)
+            let sessionLenRead = read(currentFd, &sessionLenBuffer, 4)
+            self.appendLog("Debug: 讀取 StartSession 長度 header，長度=\(sessionLenRead)")
+            guard sessionLenRead == 4 else {
+                throw NSError(domain: "DeviceManager", code: -32, userInfo: [NSLocalizedDescriptionKey: "讀取 StartSession 回應長度失敗"])
+            }
+            
+            let sessionResponseLength = sessionLenBuffer.withUnsafeBytes { buffer in
+                CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+            }
+            
+            guard sessionResponseLength > 0 && sessionResponseLength < 1_000_000 else {
+                throw NSError(domain: "DeviceManager", code: -33, userInfo: [NSLocalizedDescriptionKey: "無效的 StartSession 回應長度"])
+            }
+            
+            var sessionPayloadBuffer = [UInt8](repeating: 0, count: Int(sessionResponseLength))
+            var sessionTotalBytesRead = 0
+            while sessionTotalBytesRead < Int(sessionResponseLength) {
+                let readChunk = read(currentFd, &sessionPayloadBuffer[sessionTotalBytesRead], Int(sessionResponseLength) - sessionTotalBytesRead)
+                if readChunk <= 0 {
+                    throw NSError(domain: "DeviceManager", code: -34, userInfo: [NSLocalizedDescriptionKey: "讀取 StartSession 數據中斷"])
+                }
+                sessionTotalBytesRead += readChunk
+            }
+            
+            let sessionPayloadData = Data(sessionPayloadBuffer)
+            if let sessionPlist = try? PropertyListSerialization.propertyList(from: sessionPayloadData, options: [], format: nil) as? [String: Any] {
+                if let sessionID = sessionPlist["SessionID"] as? String {
+                    self.appendLog("Lockdownd 會話建立成功！SessionID: \(sessionID)")
+                    sessionSuccess = true
+                } else if let errorMsg = sessionPlist["Error"] as? String {
+                    if errorMsg.lowercased() == "sessionactive" {
+                        self.appendLog("偵測到活躍會話，已安全忽略並繼續...")
+                        sessionSuccess = true
+                    } else {
+                        self.appendLog("建立會話警報：\(errorMsg)，嘗試繼續...")
+                    }
+                }
+            }
+        } catch {
+            self.appendLog("StartSession 嘗試失敗（\(error.localizedDescription)），將自動安全降級為 Direct 模式...")
+            close(currentFd)
+            
+            // 重新建立全新 Socket 連接
+            self.appendLog("重新建立 Direct Tunnel Socket 連線...")
+            let fallbackFd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fallbackFd >= 0 else {
+                throw NSError(domain: "DeviceManager", code: -10, userInfo: [NSLocalizedDescriptionKey: "無法創建 Unix Socket"])
+            }
+            
+            setsockopt(fallbackFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+            setsockopt(fallbackFd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+            
+            let connectRes = withUnsafePointer(to: &addr) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                    Darwin.connect(fallbackFd, sockaddrPointer, socklen_t(addrSize))
+                }
+            }
+            
+            guard connectRes >= 0 else {
+                close(fallbackFd)
+                throw NSError(domain: "DeviceManager", code: -11, userInfo: [NSLocalizedDescriptionKey: "無法重新連接到本地 usbmuxd"])
+            }
+            
+            guard sendUsbmuxPlist(fallbackFd, plist: connectPlist, tag: 150) else {
+                close(fallbackFd)
+                throw NSError(domain: "DeviceManager", code: -12, userInfo: [NSLocalizedDescriptionKey: "重新發送 usbmux Connect 失敗"])
+            }
+            
+            guard let connResult = readUsbmuxResponse(fallbackFd, timeoutSeconds: 3) else {
+                close(fallbackFd)
+                throw NSError(domain: "DeviceManager", code: -13, userInfo: [NSLocalizedDescriptionKey: "重新讀取 usbmux Connect 回應失敗"])
+            }
+            
+            if let number = connResult["Number"] as? Int, number != 0 {
+                close(fallbackFd)
+                throw NSError(domain: "DeviceManager", code: -14, userInfo: [NSLocalizedDescriptionKey: "重新連接 Lockdownd 被拒 (代碼: \(number))"])
+            }
+            
+            currentFd = fallbackFd
+            sessionSuccess = false
+        }
+        
+        // -------------------------------------------------------------
+        // 步驟 1-B: 升級 Socket 為 SSL/TLS (mTLS) 加密流
+        // -------------------------------------------------------------
+        var useSSL = false
+        var reader: CFReadStream?
+        var writer: CFWriteStream?
+        
+        if sessionSuccess, let record = pairRecord {
+            self.appendLog("正在透過 OpenSSL 生成臨時客戶端證書...")
+            if let identity = createSecIdentityFromPairRecord(record) {
+                establishedIdentity = identity
+                self.appendLog("成功生成客戶端 SecIdentity。正在升級 Socket 為 SSL/TLS...")
+                
+                var readStream: Unmanaged<CFReadStream>?
+                var writeStream: Unmanaged<CFWriteStream>?
+                CFStreamCreatePairWithSocket(kCFAllocatorDefault, currentFd, &readStream, &writeStream)
+                
+                if let rUnmanaged = readStream, let wUnmanaged = writeStream {
+                    let r = rUnmanaged.takeRetainedValue()
+                    let w = wUnmanaged.takeRetainedValue()
+                    let sslSettings: [String: Any] = [
+                        kCFStreamSSLIsServer as String: false,
+                        kCFStreamSSLCertificates as String: [identity] as CFArray,
+                        kCFStreamSSLValidatesCertificateChain as String: false
+                    ]
+                    
+                    CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+                    CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+                    
+                    if CFReadStreamOpen(r) && CFWriteStreamOpen(w) {
+                        reader = r
+                        writer = w
+                        useSSL = true
+                        self.appendLog("SSL/TLS 流升級成功！")
+                    } else {
+                        self.appendLog("無法開啟 SSL/TLS 流，將嘗試使用明文連線...")
+                    }
+                }
+            } else {
+                self.appendLog("無法生成 SecIdentity，將嘗試使用明文連線...")
+            }
+        }
+        
+        // -------------------------------------------------------------
+        // 步驟 2: 發送 StartService 啟動定位服務
+        // -------------------------------------------------------------
+        self.appendLog("Debug: 正在發送 StartService com.apple.dt.simulatelocation 請求...")
         let startServiceRequest: [String: Any] = [
             "Label": "flyflyfly",
             "Request": "StartService",
             "Service": "com.apple.dt.simulatelocation"
         ]
         
-        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: startServiceRequest, format: .xml, options: 0) else {
-            close(fd)
-            throw NSError(domain: "DeviceManager", code: -15, userInfo: [NSLocalizedDescriptionKey: "無法序列化 StartService 請求"])
-        }
+        var servicePort: Int? = nil
         
-        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
-        var sendData = Data()
-        withUnsafePointer(to: &lengthHeader) { pointer in
-            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
-        }
-        sendData.append(reqData)
-        
-        let bytesWritten = sendData.withUnsafeBytes { buffer in
-            write(fd, buffer.baseAddress, sendData.count)
-        }
-        
-        guard bytesWritten == sendData.count else {
-            close(fd)
-            throw NSError(domain: "DeviceManager", code: -16, userInfo: [NSLocalizedDescriptionKey: "寫入 StartService 失敗"])
-        }
-        
-        var lenBuffer = [UInt8](repeating: 0, count: 4)
-        let lenRead = read(fd, &lenBuffer, 4)
-        guard lenRead == 4 else {
-            close(fd)
-            throw NSError(domain: "DeviceManager", code: -17, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 回應長度失敗"])
-        }
-        
-        let responseLength = lenBuffer.withUnsafeBytes { buffer in
-            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
-        }
-        
-        guard responseLength > 0 && responseLength < 1_000_000 else {
-            close(fd)
-            throw NSError(domain: "DeviceManager", code: -18, userInfo: [NSLocalizedDescriptionKey: "無效的 StartService 回應長度"])
-        }
-        
-        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
-        var totalBytesRead = 0
-        while totalBytesRead < Int(responseLength) {
-            let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
-            if readChunk <= 0 {
-                close(fd)
-                throw NSError(domain: "DeviceManager", code: -19, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 數據中斷"])
+        if useSSL, let r = reader, let w = writer {
+            // 在 SSL 通道上發送與讀取
+            if writePlistToStream(w, plist: startServiceRequest) {
+                if let response = readPlistFromStream(r) {
+                    self.appendLog("Debug: (SSL) StartService 回應 plist=\(response)")
+                    servicePort = response["Port"] as? Int
+                    if servicePort == nil, let errorMsg = response["Error"] as? String {
+                        CFReadStreamClose(r)
+                        CFWriteStreamClose(w)
+                        close(currentFd)
+                        throw NSError(domain: "DeviceManager", code: -21, userInfo: [NSLocalizedDescriptionKey: "啟動定位服務失敗：\(errorMsg)"])
+                    }
+                } else {
+                    self.appendLog("SSL 讀取 StartService 回應失敗。")
+                }
+            } else {
+                self.appendLog("SSL 寫入 StartService 失敗。")
             }
-            totalBytesRead += readChunk
-        }
-        
-        let payloadData = Data(payloadBuffer)
-        guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
-            close(fd)
-            throw NSError(domain: "DeviceManager", code: -20, userInfo: [NSLocalizedDescriptionKey: "解析 StartService 回應失敗"])
-        }
-        
-        guard let servicePort = plist["Port"] as? Int else {
-            close(fd)
-            if let errorMsg = plist["Error"] as? String {
-                throw NSError(domain: "DeviceManager", code: -21, userInfo: [NSLocalizedDescriptionKey: "啟動定位服務失敗：\(errorMsg)"])
+            
+            // 關閉 SSL 流
+            CFReadStreamClose(r)
+            CFWriteStreamClose(w)
+        } else {
+            // 備用的明文通訊邏輯
+            guard let reqData = try? PropertyListSerialization.data(fromPropertyList: startServiceRequest, format: .xml, options: 0) else {
+                close(currentFd)
+                throw NSError(domain: "DeviceManager", code: -15, userInfo: [NSLocalizedDescriptionKey: "無法序列化 StartService 請求"])
             }
-            throw NSError(domain: "DeviceManager", code: -22, userInfo: [NSLocalizedDescriptionKey: "StartService 未返回 Port 號"])
+            
+            var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
+            var sendData = Data()
+            withUnsafePointer(to: &lengthHeader) { pointer in
+                sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
+            }
+            sendData.append(reqData)
+            
+            let bytesWritten = sendData.withUnsafeBytes { buffer in
+                write(currentFd, buffer.baseAddress, sendData.count)
+            }
+            
+            guard bytesWritten == sendData.count else {
+                close(currentFd)
+                throw NSError(domain: "DeviceManager", code: -16, userInfo: [NSLocalizedDescriptionKey: "寫入 StartService 失敗"])
+            }
+            
+            var lenBuffer = [UInt8](repeating: 0, count: 4)
+            let lenRead = read(currentFd, &lenBuffer, 4)
+            guard lenRead == 4 else {
+                close(currentFd)
+                throw NSError(domain: "DeviceManager", code: -17, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 回應長度失敗"])
+            }
+            
+            let responseLength = lenBuffer.withUnsafeBytes { buffer in
+                CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+            }
+            
+            guard responseLength > 0 && responseLength < 1_000_000 else {
+                close(currentFd)
+                throw NSError(domain: "DeviceManager", code: -18, userInfo: [NSLocalizedDescriptionKey: "無效的 StartService 回應長度"])
+            }
+            
+            var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
+            var totalBytesRead = 0
+            while totalBytesRead < Int(responseLength) {
+                let readChunk = read(currentFd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
+                if readChunk <= 0 {
+                    close(currentFd)
+                    throw NSError(domain: "DeviceManager", code: -19, userInfo: [NSLocalizedDescriptionKey: "讀取 StartService 數據中斷"])
+                }
+                totalBytesRead += readChunk
+            }
+            
+            let payloadData = Data(payloadBuffer)
+            guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
+                close(currentFd)
+                throw NSError(domain: "DeviceManager", code: -20, userInfo: [NSLocalizedDescriptionKey: "解析 StartService 回應失敗"])
+            }
+            
+            self.appendLog("Debug: 明文 StartService 回應 plist=\(plist)")
+            servicePort = plist["Port"] as? Int
+            if servicePort == nil {
+                close(currentFd)
+                if let errorMsg = plist["Error"] as? String {
+                    throw NSError(domain: "DeviceManager", code: -21, userInfo: [NSLocalizedDescriptionKey: "啟動定位服務失敗：\(errorMsg)"])
+                }
+                throw NSError(domain: "DeviceManager", code: -22, userInfo: [NSLocalizedDescriptionKey: "StartService 未返回 Port 號"])
+            }
         }
         
-        close(fd)
-        self.appendLog("成功在設備上啟動 com.apple.dt.simulatelocation 服務 (埠號: \(servicePort))")
+        guard let finalPort = servicePort else {
+            close(currentFd)
+            throw NSError(domain: "DeviceManager", code: -28, userInfo: [NSLocalizedDescriptionKey: "無法啟動定位模擬服務（Port 為空）"])
+        }
+        
+        close(currentFd)
+        self.appendLog("成功在設備上啟動 com.apple.dt.simulatelocation 服務 (埠號: \(finalPort))")
         
         // -------------------------------------------------------------
-        // 步驟 2: 再次連接 usbmuxd，穿透到剛才啟動的定位服務 Port
+        // 步驟 3: 再次連接 usbmuxd，穿透到剛才啟動的定位服務 Port
         // -------------------------------------------------------------
-        self.appendLog("正在建立定位服務之穿透 Socket (Port: \(servicePort))...")
+        self.appendLog("正在建立定位服務之穿透 Socket (Port: \(finalPort))...")
         let serviceFd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard serviceFd >= 0 else {
             throw NSError(domain: "DeviceManager", code: -23, userInfo: [NSLocalizedDescriptionKey: "無法創建第二個 Unix Socket"])
@@ -596,7 +882,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             throw NSError(domain: "DeviceManager", code: -24, userInfo: [NSLocalizedDescriptionKey: "無法再次連接到本地 usbmuxd"])
         }
         
-        let portNumber = Int(CFSwapInt16HostToBig(UInt16(servicePort)))
+        let portNumber = Int(CFSwapInt16HostToBig(UInt16(finalPort)))
         let connectServicePlist: [String: Any] = [
             "ClientVersionString": "flyflyfly",
             "DeviceID": deviceID,
@@ -621,7 +907,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
         
         self.appendLog("定位服務穿透成功！Socket 已接通。")
-        return serviceFd
+        return (serviceFd, establishedIdentity)
     }
 
     private struct UsbmuxHeader {
@@ -689,6 +975,125 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
         
         return plist
+    }
+
+    private func createSecIdentityFromPairRecord(_ pairRecord: [String: Any]) -> SecIdentity? {
+        guard let certData = pairRecord["HostCertificate"] as? Data,
+              let keyData = pairRecord["HostPrivateKey"] as? Data else {
+            self.appendLog("配對記錄中缺少 HostCertificate 或 HostPrivateKey。")
+            return nil
+        }
+        
+        let tempDir = NSTemporaryDirectory()
+        let certPath = tempDir + "fly_host.crt"
+        let keyPath = tempDir + "fly_host.key"
+        let p12Path = tempDir + "fly_identity.p12"
+        
+        do {
+            try certData.write(to: URL(fileURLWithPath: certPath))
+            try keyData.write(to: URL(fileURLWithPath: keyPath))
+        } catch {
+            self.appendLog("無法寫入臨時證書檔案：\(error.localizedDescription)")
+            return nil
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
+        process.arguments = [
+            "pkcs12", "-export",
+            "-out", p12Path,
+            "-inkey", keyPath,
+            "-in", certPath,
+            "-passout", "pass:flyflyfly"
+        ]
+        
+        let errPipe = Pipe()
+        process.standardError = errPipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            self.appendLog("執行 openssl 失敗：\(error.localizedDescription)")
+            return nil
+        }
+        
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        if let errStr = String(data: errData, encoding: .utf8), !errStr.isEmpty {
+            self.appendLog("Debug: openssl 錯誤輸出: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        
+        defer {
+            try? FileManager.default.removeItem(atPath: certPath)
+            try? FileManager.default.removeItem(atPath: keyPath)
+            try? FileManager.default.removeItem(atPath: p12Path)
+        }
+        
+        guard process.terminationStatus == 0 else {
+            self.appendLog("openssl 導出 p12 失敗，代碼：\(process.terminationStatus)")
+            return nil
+        }
+        
+        guard let p12Data = try? Data(contentsOf: URL(fileURLWithPath: p12Path)) else {
+            self.appendLog("無法讀取產出的 p12 檔案。")
+            return nil
+        }
+        
+        let options: [String: Any] = [kSecImportExportPassphrase as String: "flyflyfly"]
+        var items: CFArray?
+        let status = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items)
+        
+        guard status == errSecSuccess,
+              let itemsArray = items as? [[String: Any]],
+              let firstItem = itemsArray.first,
+              let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity? else {
+            self.appendLog("SecPKCS12Import 導入失敗，狀態碼：\(status)")
+            return nil
+        }
+        
+        return identity
+    }
+    
+    private func writePlistToStream(_ writer: CFWriteStream, plist: [String: Any]) -> Bool {
+        guard let plistData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
+            return false
+        }
+        
+        var lengthHeader = CFSwapInt32HostToBig(UInt32(plistData.count))
+        var sendData = Data()
+        withUnsafePointer(to: &lengthHeader) { pointer in
+            sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
+        }
+        sendData.append(plistData)
+        
+        let bytesWritten = sendData.withUnsafeBytes { buffer in
+            CFWriteStreamWrite(writer, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), sendData.count)
+        }
+        
+        return bytesWritten == sendData.count
+    }
+    
+    private func readPlistFromStream(_ reader: CFReadStream) -> [String: Any]? {
+        var lenBuffer = [UInt8](repeating: 0, count: 4)
+        let bytesRead = CFReadStreamRead(reader, &lenBuffer, 4)
+        guard bytesRead == 4 else { return nil }
+        
+        let responseLength = lenBuffer.withUnsafeBytes { buffer in
+            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+        }
+        
+        guard responseLength > 0 && responseLength < 1_000_000 else { return nil }
+        
+        var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
+        var totalBytesRead = 0
+        while totalBytesRead < Int(responseLength) {
+            let readChunk = CFReadStreamRead(reader, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
+            if readChunk <= 0 { return nil }
+            totalBytesRead += readChunk
+        }
+        
+        let payloadData = Data(payloadBuffer)
+        return try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any]
     }
 
     private func manualEndpointIfValid() -> Endpoint? {
@@ -1200,8 +1605,16 @@ extension DeviceManager: DTXClientDelegate {
         
         let errorMsg = error?.localizedDescription ?? "正常中斷"
         print("[DeviceManager] 原生 DTX 監控連線中斷: \(errorMsg)")
-        self.appendLog("⚠️ 原生 DTX 監控連線中斷: \(errorMsg)")
         
+        // 如果是正常中斷且我們並未主動斷開，可能是因為剛連線時的協議切換或瞬時抖動，
+        // 在 Legacy 模式下，我們傾向於保持連線實體，除非明確失敗。
+        if error == nil && !userInitiatedDisconnect {
+            self.appendLog("ℹ️ 原生 DTX 監控連線已進入背景或正常重連狀態 (\(errorMsg))")
+            // 不清除 dtxClient，保持其用於定位注入
+            return
+        }
+
+        self.appendLog("⚠️ 原生 DTX 監控連線中斷: \(errorMsg)")
         self.dtxClient = nil
         self.systemInfo = IOSSystemInfo()
     }

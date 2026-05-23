@@ -19,6 +19,8 @@ public class DTXClient: @unchecked Sendable {
     private var isRunning = false
     private var nextIdentifier: UInt32 = 1
     private var isLegacy = false
+    private var sslReader: CFReadStream?
+    private var sslWriter: CFWriteStream?
     
     private var currentBuffer = Data()
     
@@ -50,12 +52,59 @@ public class DTXClient: @unchecked Sendable {
     }
     
     /// 以 iOS 16- (USBMux Direct Socket) 模式啟動
-    public func startLegacy(socketFd: Int32) async throws {
+    public func startLegacy(socketFd: Int32, identity: SecIdentity? = nil) async throws {
         self.isLegacy = true
         self.socketFd = socketFd
         self.isRunning = true
         
         print("[DTXClient] 正在以 Legacy (Socket FD: \(socketFd)) 模式啟動")
+        
+        // 升級 Socket 為 SSL/TLS 加密通道 (mTLS 雙向認證 / 單向 TLS)
+        print("[DTXClient] 正在為 Legacy 定位 Socket 建立 SSL/TLS 連接...")
+        var readStream: Unmanaged<CFReadStream>?
+        var writeStream: Unmanaged<CFWriteStream>?
+        CFStreamCreatePairWithSocket(kCFAllocatorDefault, socketFd, &readStream, &writeStream)
+        
+        if let rUnmanaged = readStream, let wUnmanaged = writeStream {
+            let r = rUnmanaged.takeRetainedValue()
+            let w = wUnmanaged.takeRetainedValue()
+            
+            var sslSettings: [String: Any] = [
+                kCFStreamSSLIsServer as String: false,
+                kCFStreamSSLValidatesCertificateChain as String: false
+            ]
+            
+            if let ident = identity {
+                sslSettings[kCFStreamSSLCertificates as String] = [ident] as CFArray
+                print("[DTXClient] 正在以雙向認證 (mTLS) 方式升級 SSL/TLS 通道...")
+            } else {
+                print("[DTXClient] 正在以單向認證方式升級 SSL/TLS 通道...")
+            }
+            
+            CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+            CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+            
+            CFReadStreamOpen(r)
+            CFWriteStreamOpen(w)
+            
+            // 等待流開啟且 TLS 握手成功 (最多等待 3 秒)
+            var timeoutCount = 0
+            while CFReadStreamGetStatus(r) != .open || CFWriteStreamGetStatus(w) != .open {
+                try? await Task.sleep(nanoseconds: 50_000_000) // 等待 50 毫秒
+                timeoutCount += 1
+                if timeoutCount > 60 { // 3 秒超時
+                    break
+                }
+            }
+            
+            if CFReadStreamGetStatus(r) == .open && CFWriteStreamGetStatus(w) == .open {
+                self.sslReader = r
+                self.sslWriter = w
+                print("[DTXClient] SSL/TLS 連線建立成功！已進入安全加密傳輸模式。")
+            } else {
+                print("[DTXClient] 警告：無法開啟 SSL/TLS 加密流，將退回明文連線。")
+            }
+        }
         
         // 背景啟動 Read Loop
         startReadLoop()
@@ -73,6 +122,15 @@ public class DTXClient: @unchecked Sendable {
         if let nw = nwConnection {
             nw.cancel()
             nwConnection = nil
+        }
+        
+        if let r = sslReader {
+            CFReadStreamClose(r)
+            sslReader = nil
+        }
+        if let w = sslWriter {
+            CFWriteStreamClose(w)
+            sslWriter = nil
         }
         
         if socketFd >= 0 {
@@ -218,6 +276,15 @@ public class DTXClient: @unchecked Sendable {
         let payload = msg.serialize()
         if let nw = nwConnection {
             try await sendNwData(nw, data: payload)
+        } else if let w = sslWriter {
+            try await Task.detached(priority: .userInitiated) { [w] in
+                let bytesWritten = payload.withUnsafeBytes { buffer in
+                    CFWriteStreamWrite(w, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), payload.count)
+                }
+                if bytesWritten != payload.count {
+                    throw NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 寫入失敗"])
+                }
+            }.value
         } else if socketFd >= 0 {
             try await Task.detached(priority: .userInitiated) { [socketFd] in
                 let bytesWritten = payload.withUnsafeBytes { buffer in
@@ -235,6 +302,19 @@ public class DTXClient: @unchecked Sendable {
     private func readNetworkBytes(length: Int) async throws -> Data {
         if let nw = nwConnection {
             return try await receiveNwData(nw, length: length)
+        } else if let r = sslReader {
+            return try await Task.detached(priority: .userInitiated) { [r] in
+                var buffer = [UInt8](repeating: 0, count: length)
+                var totalBytes = 0
+                while totalBytes < length {
+                    let readChunk = CFReadStreamRead(r, &buffer[totalBytes], length - totalBytes)
+                    if readChunk <= 0 {
+                        throw NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 斷開"])
+                    }
+                    totalBytes += readChunk
+                }
+                return Data(buffer)
+            }.value
         } else if socketFd >= 0 {
             return try await Task.detached(priority: .userInitiated) { [socketFd] in
                 var buffer = [UInt8](repeating: 0, count: length)
@@ -284,7 +364,14 @@ public class DTXClient: @unchecked Sendable {
                     
                 } catch {
                     if self.isRunning {
-                        print("[DTXClient] 讀取迴圈異常中斷: \(error.localizedDescription)")
+                        let errorDescription = error.localizedDescription
+                        // 忽略一些常見的、可能在剛建立連線時發生的瞬時錯誤或超時，避免直接斷開
+                        if errorDescription.contains("timeout") || errorDescription.contains("Operation timed out") {
+                            print("[DTXClient] 讀取超時，重試中...")
+                            continue
+                        }
+
+                        print("[DTXClient] 讀取迴圈異常中斷: \(errorDescription)")
                         self.stop()
                         Task { @MainActor in
                             self.delegate?.dtxClient(self, didDisconnectWithError: error)
@@ -360,6 +447,26 @@ public class DTXClient: @unchecked Sendable {
     // ==============================================================================
     
     private func runDTXProtocolFlow() async throws {
+        if isLegacy {
+            print("[DTXClient] Legacy 模式：僅註冊 Channel 2 (LocationSimulation) 核心定位服務")
+            let requestLocationChannelMsg = try DTXMessage.makeMethodCall(
+                identifier: getNextIdentifier(),
+                channelCode: 0,
+                selector: "_requestChannelWithIdentifier:target:",
+                arguments: [
+                    .int32(2), // Channel ID
+                    .string("com.apple.instruments.server.services.coreservices.LocationSimulation") // Target Service Name
+                ],
+                expectsReply: true
+            )
+            
+            try await sendDTXMessage(requestLocationChannelMsg)
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            print("[DTXClient] 原生位置模擬通道註冊成功！")
+            return
+        }
+        
+        // RSD 模式 (iOS 17+)
         // 1. 發送管道請求：_requestChannelWithIdentifier:target:
         // 我們將 Channel 1 註冊給 sysmontap 服務
         print("[DTXClient] 正在發送註冊 Channel 1 請求...")
