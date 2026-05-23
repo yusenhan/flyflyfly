@@ -112,7 +112,7 @@ struct DeviceStatusSectionView: View {
 
             if !vm.deviceManager.isConnected {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("🔌 連線故障排障指引", systemImage: "questionmark.key.fill")
+                    Label("🔌 連線故障排障指引", systemImage: "questionmark.circle.fill")
                         .font(.caption)
                         .fontWeight(.bold)
                         .foregroundColor(ModernTheme.accent)

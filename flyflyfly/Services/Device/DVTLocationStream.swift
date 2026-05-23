@@ -1,7 +1,7 @@
 import Foundation
 
 final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
-    private weak var dtxClient: DTXClient?
+    private var dtxClient: DTXClient?
     private var currentHost: String?
     private var currentPort: String?
     private let stateLock = NSLock()

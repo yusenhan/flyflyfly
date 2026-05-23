@@ -2,12 +2,12 @@
 
 **Generated:** 2026-05-22
 **Version:** v0.99a
-**Commit:** Native Swift Architecture (DTX + USBMux)
+**Commit:** Swift-native DTX/USBMux with retained C++ acceleration
 **Branch:** main
 
 ## OVERVIEW
 
-macOS SwiftUI app that spoofs iOS device GPS location. It utilizes a **100% self-developed, highly efficient, pure Swift native DTX protocol and USBMux Socket penetration architecture**, successfully eliminating all dependencies on external Python background processes (`pymobiledevice3`), external binary tools (`dvt-location-stream`), and C++ wrappers (`FastMotionEngineWrapper`).
+macOS SwiftUI app that spoofs iOS device GPS location. It uses a self-developed Swift-native DTX protocol and USBMux socket architecture for device communication. The current codebase is Swift-first, but still retains Objective-C++/C++ acceleration for route math, spatial indexing, and legacy tunnel helpers (`FastMotionEngineWrapper`, `SpatialIndex`, `NativeTunnel`). iOS 17+ RSD endpoint discovery is not fully native yet; users may still need to provide an RSD host/port obtained externally.
 
 ## STRUCTURE
 
@@ -54,7 +54,7 @@ flyflyfly/
     └── Sidebar/
 ```
 
-## NATIVE SWIFT REVOLUTION (2026-05)
+## NATIVE SWIFT DEVICE CORE (2026-05)
 
 1. **Native Device Detection (USBMuxMonitor):**
    - Connects directly to `/var/run/usbmuxd` Domain Socket, natively listening to USB attached/detached events.
@@ -69,9 +69,11 @@ flyflyfly/
 4. **Adapter Mode for Location Stream (DVTLocationStream):**
    - Rewritten as a clean Swift adapter holding a weak reference to `DTXClient`. 
    - Dispatches coordinate mock requests asynchronously using Swift `Task` on background threads to ensure zero UI stutter.
-5. **Zero External Dependency:**
-   - No Python runtime (`pymobiledevice3`) or helper binaries (`dvt-location-stream`) are needed for runtime operations.
-   - "Clear simulation" is achieved entirely natively via DTX RPC without spawning sub-processes.
+5. **Dependency Boundary:**
+   - Runtime location injection uses the in-process Swift `DTXClient` and `DVTLocationStream` adapter instead of spawning `dvt-location-stream`.
+   - iOS 17+ RSD endpoint discovery is still manual; the app can consume an RSD host/port obtained via external tooling such as `pymobiledevice3 remote start-tunnel`.
+   - Route interpolation and PurePoint spatial filtering still compile Objective-C++/C++ sources through `FastMotionEngineWrapper`.
+   - "Clear simulation" is sent through the native DTX RPC path once the client is connected.
 
 ## CONVENTIONS
 
@@ -82,5 +84,5 @@ flyflyfly/
 
 ## NOTES
 
-- The binaries in `bundled/` are now entirely deprecated for the DVT mode but kept for fallback or backward compatibility.
+- The binaries in `bundled/` are deprecated for DTX location injection, but iOS 17+ RSD endpoint discovery may still require an external tool until native discovery is implemented.
 - `Item.swift` remains as a SwiftData placeholder but is currently unused.

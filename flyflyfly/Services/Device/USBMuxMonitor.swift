@@ -286,7 +286,7 @@ public class USBMuxMonitor: ObservableObject {
         guard bytesRead == headerLength else { return nil }
         
         let header = headerBuffer.withUnsafeBytes { buffer in
-            buffer.load(as: UsbmuxHeader.self)
+            buffer.loadUnaligned(as: UsbmuxHeader.self)
         }
         
         let payloadLength = Int(header.length) - headerLength
@@ -370,70 +370,60 @@ public class USBMuxMonitor: ObservableObject {
             return details
         }
         
-        // Socket is now a direct tunnel to lockdownd!
-        // Lockdownd protocol: 4-byte big-endian length header, followed by XML plist.
-        // We send a single unkeyed GetValue request. This is extremely robust and performs
-        // only 1 read/write roundtrip, preventing lockdownd from abruptly resetting the socket
-        // and avoiding EPIPE/SIGPIPE crashes.
-        let lockdowndRequest: [String: Any] = [
-            "Label": "flyflyfly",
-            "Request": "GetValue"
-        ]
-        
-        guard let reqData = try? PropertyListSerialization.data(fromPropertyList: lockdowndRequest, format: .xml, options: 0) else {
-            return details
+        // Socket is now a direct tunnel to lockdownd. Query only the exact keys needed
+        // for display so the full device information dictionary never enters memory.
+        for key in ["DeviceClass", "DeviceName", "ProductType", "ProductVersion"] {
+            if let value = queryLockdownValue(socketFd: fd, key: key) {
+                details[key] = value
+            }
         }
         
-        // Send length header (Big-endian UInt32)
-        var lengthHeader = CFSwapInt32HostToBig(UInt32(reqData.count))
+        return details
+    }
+
+    private func queryLockdownValue(socketFd fd: Int32, key: String) -> String? {
+        let request: [String: Any] = [
+            "Label": "flyflyfly",
+            "Request": "GetValue",
+            "Key": key
+        ]
+
+        guard let requestData = try? PropertyListSerialization.data(fromPropertyList: request, format: .xml, options: 0) else {
+            return nil
+        }
+
+        var lengthHeader = CFSwapInt32HostToBig(UInt32(requestData.count))
         var sendData = Data()
         withUnsafePointer(to: &lengthHeader) { pointer in
             sendData.append(UnsafeBufferPointer(start: pointer, count: 1))
         }
-        sendData.append(reqData)
-        
+        sendData.append(requestData)
+
         let bytesWritten = sendData.withUnsafeBytes { buffer in
             write(fd, buffer.baseAddress, sendData.count)
         }
-        
-        guard bytesWritten == sendData.count else { return details }
-        
-        // Read Lockdownd response length header
+        guard bytesWritten == sendData.count else { return nil }
+
         var lenBuffer = [UInt8](repeating: 0, count: 4)
-        let lenRead = read(fd, &lenBuffer, 4)
-        guard lenRead == 4 else { return details }
-        
+        guard read(fd, &lenBuffer, 4) == 4 else { return nil }
+
         let responseLength = lenBuffer.withUnsafeBytes { buffer in
-            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+            CFSwapInt32BigToHost(buffer.loadUnaligned(as: UInt32.self))
         }
-        
-        guard responseLength > 0 && responseLength < 1_000_000 else { return details } // Prevent huge memory allocation
-        
-        // Read Lockdownd XML plist payload
+        guard responseLength > 0 && responseLength < 1_000_000 else { return nil }
+
         var payloadBuffer = [UInt8](repeating: 0, count: Int(responseLength))
         var totalBytesRead = 0
         while totalBytesRead < Int(responseLength) {
             let readChunk = read(fd, &payloadBuffer[totalBytesRead], Int(responseLength) - totalBytesRead)
-            if readChunk <= 0 {
-                return details
-            }
+            if readChunk <= 0 { return nil }
             totalBytesRead += readChunk
         }
-        
+
         let payloadData = Data(payloadBuffer)
         guard let plist = try? PropertyListSerialization.propertyList(from: payloadData, options: [], format: nil) as? [String: Any] else {
-            return details
+            return nil
         }
-        
-        // PRIVACY ENFORCEMENT: We extract ONLY the four specific, non-sensitive keys in memory
-        // and immediately discard the rest of the response to ensure complete privacy.
-        if let valueDict = plist["Value"] as? [String: Any] {
-            details["DeviceClass"] = valueDict["DeviceClass"] as? String
-            details["DeviceName"] = valueDict["DeviceName"] as? String
-            details["ProductType"] = valueDict["ProductType"] as? String
-            details["ProductVersion"] = valueDict["ProductVersion"] as? String
-        }
-        
-        return details
+        return plist["Value"] as? String
     }
 }

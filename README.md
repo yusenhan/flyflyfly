@@ -7,13 +7,13 @@ English Version: [English README](./README.en.md)
 ![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
 ![Swift Native](https://img.shields.io/badge/Language-Swift-orange?style=flat-square&logo=swift)
-![Architecture](https://img.shields.io/badge/Architecture-100%25%20Pure%20Swift-red?style=flat-square)
+![Architecture](https://img.shields.io/badge/Architecture-Swift--native%20DTX-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 **當前最新版本**：`v0.99a`
 
 **flyflyfly 是一款專為 macOS 打造的 iOS 全球定位模擬旗艦級工具。**  
-基於 **100% 原生 Swift 自研 DTX 協定與 USBMux 滲透技術**，讓開發者與測試人員在 Apple Silicon (M1/M2/M3/M4) 或 Intel Mac 上，以極低資源佔用精準控制 iPhone/iPad GPS 座標，完美支持 iOS 17、18 及其以上版本。
+基於 **Swift 原生 DTX 協定與 USBMux 通訊核心**，讓開發者與測試人員在 Apple Silicon (M1/M2/M3/M4) 或 Intel Mac 上，以低資源佔用精準控制 iPhone/iPad GPS 座標。現階段 iOS 17+ 仍需要使用者手動提供 RSD Address 與 Port；路線計算與 PurePoint 空間索引仍保留 C++/Objective-C++ 加速模組。
 
 ---
 
@@ -29,7 +29,7 @@ English Version: [English README](./README.en.md)
 *   **原生 Lockdownd 握手**：透過純 Swift 直連裝置 Port 62078 進行握手，原生安全提取設備元數據（DeviceName, ProductType, ProductVersion 等），打造絲滑的自動連接體驗。
 
 ### 🚀 極致效能與零 UI 卡頓 (Ultra-Lightweight)
-*   **超低資源佔用**：捨棄一切重型外部行程調用，運行記憶體開銷降至 **5MB 以下**，CPU 佔用近乎為零。
+*   **低資源佔用**：定位注入路徑已改為 App 內部 Swift DTX client，不再透過 `dvt-location-stream` 常駐背景行程發送座標；部分端點探索與建置模組仍依賴外部工具或 C++ 加速。
 *   **高頻平滑軌跡注入**：利用 Swift 異步 Task 在背景執行緒進行點位計算，將經緯度包裹於 `NSKeyedArchiver` 序列化的 `NSNumber` 二進位 Plist Buffer (TypeTag = 2) 中直接注入，完美契合 Apple 位置模擬 API 的預期簽名，提供如絲般順滑的行進軌跡。
 
 ### 🚦 真實物理防作弊漫步漂移 (Jitter Spoofer)
@@ -59,7 +59,7 @@ graph TD
         Y[🛠️ 毛玻璃修復日誌面板] <-->|實時滾動日誌| B
     end
 
-    subgraph Logic_Layer [100% 原生 Swift 效能與模擬引擎]
+    subgraph Logic_Layer [Swift 原生通訊與 C++ 加速模擬引擎]
         B -->|2. 要求連線| C{DeviceManager}
         B -->|5. 軌跡運算| J[Swift RouteMotionEngine]
         J -->|座標插值串流| K[座標插值串流]
@@ -77,7 +77,7 @@ graph TD
             
             %% 一鍵自癒
             C -->|連線異常| Q[🔌 連線故障排障指引]
-            Q -->|一鍵修復| R[scripts/repair-environment.sh]
+            Q -->|一鍵修復| R[Swift 重啟 USBMuxMonitor]
             R -->|1. 重置 USBMuxd 轉發<br>2. 清除進程殘留| Y
             R -->|修復成功| C
         end
@@ -103,11 +103,11 @@ graph TD
 
 | 項目 | 支援規格 |
 |------|-------------|
-| **核心開發標準** | 100% Pure Swift (Swift Concurrency 執行緒安全保護) |
+| **核心開發標準** | SwiftUI + Swift Concurrency；DTX/USBMux 通訊為 Swift 原生，路線與空間索引保留 C++/Objective-C++ 加速 |
 | **硬體相容性** | Apple Silicon (M1/M2/M3/M4 全系列), Intel x86_64 Mac |
 | **系統要求** | macOS 13+, iOS 16, 17, 18+ |
-| **傳輸協議** | USB High-Speed (USBMuxd 直連) / 無線 RSD 隧道連線 |
-| **資源消耗** | 記憶體 < 5MB, CPU 佔用趨近於 0% |
+| **傳輸協議** | USBMuxd 直連（Legacy）/ 手動 RSD host:port（iOS 17+） |
+| **資源消耗** | 以低背景開銷為目標；實際數值需以 Instruments 或 Activity Monitor 測量 |
 
 ---
 
@@ -125,7 +125,7 @@ graph TD
 
 ## 📚 延伸文檔 (Documentation)
 *   **[功能規格文件 (FSD)](./docs/FunctionalSpecification.md)**：詳細功能模組與使用者操作流程。
-*   **[系統設計文件 (SD)](./docs/SystemDesign.md)**：基於 100% 全原生 Swift 架構的技術設計與優化細節。
+*   **[系統設計文件 (SD)](./docs/SystemDesign.md)**：基於 Swift 原生 DTX/USBMux 與保留 C++ 加速模組的技術設計與優化細節。
 
 ## ⚖️ 開源致敬與免責聲明 (Attribution & Disclaimer)
 

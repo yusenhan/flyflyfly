@@ -7,13 +7,13 @@
 ![iOS Support](https://img.shields.io/badge/iOS-16.0+-brightgreen?style=flat-square&logo=ios)
 ![Apple Silicon Support](https://img.shields.io/badge/Apple%20Silicon-Native-orange?style=flat-square)
 ![Swift Native](https://img.shields.io/badge/Language-Swift-orange?style=flat-square&logo=swift)
-![Architecture](https://img.shields.io/badge/Architecture-100%25%20Pure%20Swift-red?style=flat-square)
+![Architecture](https://img.shields.io/badge/Architecture-Swift--native%20DTX-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 **Current Version**: `v0.99a`
 
 **flyflyfly is a flagship-grade iOS location simulation utility built exclusively for macOS.**  
-Powered by a **100% self-developed, highly efficient, pure Swift DTX protocol and USBMux Socket penetration architecture**, it allows developers and testers on Apple Silicon (M1/M2/M3/M4) or Intel Macs to spoof iPhone/iPad GPS coordinates with extreme precision and negligible resource consumption, fully supporting iOS 17, 18, and beyond.
+Powered by a **Swift-native DTX protocol and USBMux communication core**, it allows developers and testers on Apple Silicon (M1/M2/M3/M4) or Intel Macs to spoof iPhone/iPad GPS coordinates with low runtime overhead. iOS 17+ currently still requires a manually provided RSD address and port; route calculation and PurePoint spatial indexing still retain C++/Objective-C++ acceleration modules.
 
 ---
 
@@ -29,7 +29,7 @@ Powered by a **100% self-developed, highly efficient, pure Swift DTX protocol an
 *   **Native Lockdownd Handshake**: Communicates directly with the device's lockdown service (Port 62078) to extract key metadata (DeviceName, ProductType, ProductVersion) natively without external helpers.
 
 ### 🚀 Ultra-Lightweight & Zero UI Stutter
-*   **Extreme Efficiency**: Spawns zero external subprocesses, slashing runtime memory footprint from 50MB+ down to **under 5MB**.
+*   **Low Runtime Overhead**: Coordinate injection now goes through the in-process Swift DTX client instead of a persistent `dvt-location-stream` subprocess. Endpoint discovery and selected compute paths still depend on external tooling or C++ acceleration.
 *   **Smooth High-Frequency Injection**: Distributes coordinate generation using Swift asynchronous Tasks in background threads. Coordinates are serialized into NSNumber plist data via `NSKeyedArchiver` and transmitted as DTX Buffers (TypeTag = 2) to perfectly match Apple's native API signature, yielding a buttery-smooth route simulation.
 
 ### 🚦 Realistic Physical Jitter Spoofer (Anti-Cheat Defense)
@@ -59,7 +59,7 @@ graph TD
         Y[🛠️ Glass Console] <-->|Streaming Logs| B
     end
 
-    subgraph Logic_Layer [100% Pure Swift Logic Engine]
+    subgraph Logic_Layer [Swift DTX Core + C++ Accelerated Engine]
         B -->|2. Req Connection| C{DeviceManager}
         B -->|5. Path Planning| J[Swift RouteMotionEngine]
         J -->|Interpolation| K[Smooth Coords Stream]
@@ -77,7 +77,7 @@ graph TD
             
             %% Auto Repair
             C -->|Err| Q[🔌 Diagnostic Card]
-            Q -->|Repair| R[scripts/repair-environment.sh]
+            Q -->|Repair| R[Swift USBMuxMonitor restart]
             R -->|1. Reset USBMuxd<br>2. Clear Ports| Y
             R -->|Resolved| C
         end
@@ -103,11 +103,11 @@ graph TD
 
 | Item | Details |
 |------|---------|
-| **Core Compute Standard** | 100% Pure Swift (Swift Concurrency Thread-Safety Guarded) |
+| **Core Compute Standard** | SwiftUI + Swift Concurrency; DTX/USBMux communication is Swift-native, with C++/Objective-C++ retained for route and spatial-index acceleration |
 | **Hardware Compatibility** | Apple Silicon (M1/M2/M3/M4 All Series), Intel x86_64 Mac |
 | **System Version** | macOS 13+, iOS 16, 17, 18+ |
-| **Connection Protocol** | High-Speed USB (USBMuxd Direct Socket) / Wireless RSD Tunnel |
-| **Resource Footprint** | Memory < 5MB, CPU Usage close to 0% |
+| **Connection Protocol** | USBMuxd direct socket (Legacy) / manually supplied RSD host:port (iOS 17+) |
+| **Resource Footprint** | Designed for low background overhead; concrete figures should be verified with Instruments or Activity Monitor |
 
 ---
 
@@ -125,7 +125,7 @@ graph TD
 
 ## 📚 Documentation
 *   **[Functional Specification (FSD)](./docs/FunctionalSpecification.md)**: Product features and user scenarios.
-*   **[System Design (SD)](./docs/SystemDesign.md)**: Native Swift architecture, socket penetration, and optimization details.
+*   **[System Design (SD)](./docs/SystemDesign.md)**: Swift-native DTX/USBMux architecture, retained C++ acceleration, and optimization details.
 
 ## ⚖️ Open Source Attribution & Disclaimer
 

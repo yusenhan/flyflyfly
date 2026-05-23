@@ -142,45 +142,7 @@ public class DTXClient: @unchecked Sendable {
             startHeartbeat()
         } else {
             log("Legacy 模式：獨立定位服務已安全開啟，直接就緒。")
-            startLegacyDrainLoop()
-        }
-    }
-    
-    private func startLegacyDrainLoop() {
-        Task { [weak self] in
-            guard let self = self else { return }
-            log("啟動 Legacy 數據排水與斷開偵測迴圈...")
-            while self.isRunning {
-                guard let r = self.sslReader else {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                    continue
-                }
-                do {
-                    let _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, Error>) in
-                        self.readQueue.async {
-                            var buffer = [UInt8](repeating: 0, count: 1024)
-                            let readChunk = CFReadStreamRead(r, &buffer, 1024)
-                            if readChunk < 0 {
-                                let streamError = CFReadStreamGetError(r)
-                                continuation.resume(throwing: NSError(domain: "DTXClient", code: Int(streamError.error), userInfo: [
-                                    NSLocalizedDescriptionKey: "Legacy SSL socket 讀取失敗 (代碼: \(streamError.error))"
-                                ]))
-                            } else if readChunk == 0 {
-                                continuation.resume(throwing: NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 斷開 (EOF)"]))
-                            } else {
-                                continuation.resume(returning: readChunk)
-                            }
-                        }
-                    }
-                } catch {
-                    if self.isRunning {
-                        let nsError = error as NSError
-                        self.log("Legacy 讀取中斷: \(error.localizedDescription) (Code: \(nsError.code))")
-                        self.stopInternal(error: error)
-                    }
-                    break
-                }
-            }
+            log("Legacy 模式：定位服務為寫入型通道，略過背景讀取探測以避免誤判 EPIPE。")
         }
     }
     
@@ -272,7 +234,7 @@ public class DTXClient: @unchecked Sendable {
         
         let lenData = try await receiveNwData(connection, length: 4)
         let responseLength = lenData.withUnsafeBytes { buffer in
-            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+            CFSwapInt32BigToHost(buffer.loadUnaligned(as: UInt32.self))
         }
         
         guard responseLength > 0 && responseLength < 1_000_000 else {
@@ -465,7 +427,7 @@ public class DTXClient: @unchecked Sendable {
             while self.isRunning {
                 do {
                     let headerData = try await self.readNetworkBytes(length: 32)
-                    let dataSizeVal = headerData.subdata(in: 12..<16).withUnsafeBytes { $0.load(as: UInt32.self) }
+                    let dataSizeVal = headerData.subdata(in: 12..<16).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
                     let bodySize = Int(UInt32(littleEndian: dataSizeVal))
                     let bodyData = try await self.readNetworkBytes(length: bodySize)
                     var fullPacket = Data(); fullPacket.append(headerData); fullPacket.append(bodyData)

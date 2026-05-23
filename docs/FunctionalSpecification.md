@@ -2,14 +2,14 @@
 
 **文件與軟體版本**：`v0.99a`
 
-本規格文件詳細定義了 `flyflyfly` macOS 應用程式的功能架構、使用者介面控制、核心操作流程、極致安全的 Native 雙向通訊協定，以及在 2026 年 5 月底落實的**「100% 純原生 Swift 去 Python 化」**與**「程式碼資安風險全面加固」**等最新技術規範。
+本規格文件詳細定義了 `flyflyfly` macOS 應用程式的功能架構、使用者介面控制、核心操作流程、Native 雙向通訊協定，以及在 2026 年 5 月底落實的 **Swift 原生 DTX/USBMux 通訊核心** 與程式碼安全加固規範。專案仍保留 C++/Objective-C++ 演算法加速模組，iOS 17+ RSD 端點目前仍需手動輸入。
 
 ---
 
 ## 🗺️ 專案概述 (Project Overview)
 
 `flyflyfly` 是一款為 iOS 設備開發的 macOS 全原生地理位置模擬與 LBS 軌跡調試工具。
-透過自主研發的高效能純 Swift Native 憑證握手、USBMux 網域 Socket 穿透、與 TLS-DTX 通訊通道，本應用得以**在完全不依賴任何外部 Python 解譯器、虛擬環境或第三方 CLI 工具（如 `pymobiledevice3`、`dvt-location-stream` 等）**的前提下，實現極致輕量、零 UI 卡頓、高精度物理防作弊漫步漂移、與一鍵自癒修復的 iOS 設備 GPS 修改方案。
+透過自主研發的 Swift Native USBMux 與 TLS-DTX 通訊通道，本應用能在 App 內部直接發送與清除定位模擬命令。現階段不再使用 `dvt-location-stream` 作為座標注入行程；iOS 17+ 的 RSD host/port 仍需由使用者手動提供，可能來自外部工具如 `pymobiledevice3 remote start-tunnel`。
 
 ---
 
@@ -36,7 +36,7 @@ graph TD
     UI <--> VM
     VM <--> Engine
     Monitor <-->|Unix Domain Socket| Daemon
-    Monitor -->|GetValue 限定特定 Key| Lockdownd
+    Monitor -->|GetValue 指定 Key| Lockdownd
     DTX <-->|TCP over TLS / Port 58783| RSD
     DTX <-->|Channel 2 Location Simulation| LocationSim
 ```
@@ -80,7 +80,7 @@ graph TD
 
 #### 🔒 1.2.2 Lockdown 安全握手與隱私保護 (資安加固規格)
 *   **功能描述**：與 Lockdownd Port `62078` 建立明文 Socket 配對握手，獲取顯示所必需的基本資訊。
-*   **資安最小化特權機制**：**完全廢除無參全域 GetValue 請求**。每次請求均明確指定特定 Key（`DeviceClass`、`DeviceName`、`ProductType`、`ProductVersion`）。設備序號 (SerialNumber), MAC 地址與 WiFiAddress 等設備敏感私隱**絕不請求、絕不載入記憶體**，保障最高規格的個資安全。
+*   **資安最小化特權機制**：Lockdown 查詢應明確指定必要 Key（`DeviceClass`、`DeviceName`、`ProductType`、`ProductVersion`），避免無參全域 `GetValue` 載入完整設備資訊。USBMux attach event 可能提供裝置識別資訊；App 不應在一般日誌中輸出完整 UDID/SerialNumber。
 
 ---
 
@@ -168,7 +168,7 @@ graph TD
     - 本應用不調用任何不安全的外部程式二進位檔案或 bash 腳本，完全杜絕了本地權限提升（Privilege Escalation）與命令行注入（Command Injection）的安全威脅。
     - App 重置與修復操作皆由原生 Swift 重建監聽，無需管理員（Root）特權，實現最佳沙盒合規性。
 3.  **設備個資隱私最小化抓取**：
-    - 透過 Lockdown 獲取設備資料時，只查詢專案所必須的四個系統欄位，將 SerialNumber、MAC Address 等設備全域屬性排除在外，實踐資料最小化（Data Minimization）。
+    - 透過 Lockdown 獲取設備資料時，只查詢專案所必須的四個系統欄位，將 SerialNumber、MAC Address 等設備全域屬性排除在外，實踐資料最小化（Data Minimization）。若 USBMux attach event 暴露 UDID/SerialNumber，僅可用於必要的 legacy 連線流程，並應避免完整寫入 UI 或診斷日誌。
 
 ---
 

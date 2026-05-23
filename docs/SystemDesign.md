@@ -3,13 +3,13 @@
 **文件與系統版本**：`v0.99a`
 
 ## 1. 架構設計 (Architecture)
-flyflyfly 採用 **100% 全原生 Swift 架構**，擺脫了所有外部 Python 背景行程 (`pymobiledevice3`)、外部二進位工具 (`dvt-location-stream`) 及 C++ 通訊封裝與 Socket 隧道。這項革新不僅顯著降低了系統資源佔用，亦解決了多執行緒同步、本地埠衝突與 Apple 安全沙盒權限限制等棘手問題。
+flyflyfly 目前採用 **Swift 原生 DTX/USBMux 通訊核心**，定位注入流程由 App 內部的 `DTXClient` 與 `DVTLocationStream` 適配器處理，不再透過 `dvt-location-stream` 常駐背景行程發送座標。專案仍保留 Objective-C++/C++ 模組作為路線插值、PurePoint 空間索引與 legacy tunnel helper 的加速層；iOS 17+ RSD endpoint discovery 尚未完全內建，使用者仍可手動輸入外部工具取得的 RSD host/port。
 
 ### 1.1 分層架構
 *   **UI Layer (SwiftUI)**：負責佈局、動畫及使用者交互。採用高防禦性的單向資料流狀態同步（Store Pattern），側邊欄與地圖視區實現了高度自適應。
 *   **Business Logic (Swift Core)**：
     *   `AppViewModel.swift`：全域運算與模擬中樞，協調定位搜尋、隨機漫步防作弊注入及狀態機切換。
-    *   `RouteMotionEngine.swift`：純 Swift 實作的 GPS 高頻插值與路網行進邏輯。
+    *   `RouteMotionEngine.swift`：Swift facade，底層透過 `FastMotionEngineWrapper` 呼叫 C++ 演算法加速 GPS 插值與路網行進邏輯。
 *   **Native Connection Core (Swift Services)**：
     *   `USBMuxMonitor`：直連 `/var/run/usbmuxd` 本地網域通訊端（Domain Socket），實時感應 USB 熱插拔並擷取 `lockdownd` 裝置資訊。
     *   `DTXClient` 與 `DTXMessage`：自研的純 Swift DTX 協定封裝器，支援 TLS（NWConnection）與 TCP 連線，複用單一通道並行傳輸多個控制服務。
@@ -45,11 +45,12 @@ flyflyfly 採用 **100% 全原生 Swift 架構**，擺脫了所有外部 Python 
 ---
 
 ## 4. 外部整合與環境修復
-*   **純 Native 零依賴**：完全不依賴 python 執行環境、`pymobiledevice3` 套件、`dvt-location-stream` 外部 CLI、虛擬環境或 Homebrew。
-*   **一鍵自癒修復 (`repair-environment.sh`)**：重置本地 USBMuxd 系統守護服務，排除連線埠佔用或通道衝突，隨後重新建立 Native Socket 連接。
+*   **定位注入零外部常駐行程**：座標發送與清除由 Swift `DTXClient` 直接完成，不再啟動 `dvt-location-stream`。
+*   **RSD 端點手動輸入**：iOS 17+ 連線仍需要使用者提供 RSD host/port；目前可由外部工具（例如 `pymobiledevice3 remote start-tunnel`）取得。
+*   **一鍵自癒修復**：App 透過 Swift 重新啟動內部 `USBMuxMonitor`，並輸出手動排障指引；不嘗試以 root 權限重啟系統 `usbmuxd`。
 
 ---
 
 ## 5. 編譯與分發
 *   專案直接利用原生 Xcode 建置系統編譯。
-*   不含任何外部 Python Script 打包配置或 spec 檔案，確保在 Debug 與 Release（WMO `-O` 全模組優化）環境下皆能 100% 綠燈成功編譯，產生極輕量、零污染的 macOS 應用程式。
+*   建置應同時驗證 Debug 與 Release。專案目前包含 Swift、Objective-C++ 與 C++ sources，需確保 bridging header 與 C++ 檔案在兩種配置下都能正常編譯。

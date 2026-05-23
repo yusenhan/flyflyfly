@@ -365,6 +365,11 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         return major < 17
     }
 
+    private func redactedDeviceIdentifier(_ identifier: String) -> String {
+        guard identifier.count > 8 else { return "redacted" }
+        return "\(identifier.prefix(4))...\(identifier.suffix(4))"
+    }
+
     private func connectDeviceInternal(autoTriggered: Bool, force: Bool) async {
         guard force || !isConnected else { return }
         if !autoTriggered {
@@ -389,7 +394,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             let devices = usbmuxMonitor.devices
             self.appendLog("Debug：當前 USBMux 偵測到的設備數量為 \(devices.count) 台")
             for (idx, dev) in devices.enumerated() {
-                self.appendLog("Debug [\(idx)]: Name=\(dev.deviceName ?? "nil"), Ver=\(dev.productVersion ?? "nil"), UDID=\(dev.id), devID=\(dev.deviceID ?? 0)")
+                self.appendLog("Debug [\(idx)]: Name=\(dev.deviceName ?? "nil"), Ver=\(dev.productVersion ?? "nil"), DeviceID=\(self.redactedDeviceIdentifier(dev.id)), devID=\(dev.deviceID ?? 0)")
             }
             
             if let targetDevice = devices.first {
@@ -401,7 +406,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 let isLegacyDevice = isVersionLegacy(ver)
                 
                 if isLegacyDevice {
-                    self.appendLog("偵測到已連接的 Legacy 裝置：\(devName) (系統: \(ver), UDID: \(udid))，啟動純 Swift 原生直連通道...")
+                    self.appendLog("偵測到已連接的 Legacy 裝置：\(devName) (系統: \(ver), DeviceID: \(self.redactedDeviceIdentifier(udid)))，啟動純 Swift 原生直連通道...")
                     self.setStage("啟動 Legacy 直連")
                     
                     self.connectedUDID = udid
@@ -538,7 +543,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         // 步驟 1: 穿透 usbmuxd 連接 lockdownd 並發送 StartService
         // -------------------------------------------------------------
         self.appendLog("正在與 Lockdownd 握手以啟動定位服務...")
-        self.appendLog("正在讀取設備配對記錄 (UDID: \(udid))...")
+        self.appendLog("正在讀取設備配對記錄 (DeviceID: \(redactedDeviceIdentifier(udid)))...")
         let pairRecord = fetchPairRecord(udid: udid)
         if pairRecord != nil {
             self.appendLog("成功獲取本機配對記錄。")
@@ -650,7 +655,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             }
             
             let sessionResponseLength = sessionLenBuffer.withUnsafeBytes { buffer in
-                CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+                CFSwapInt32BigToHost(buffer.loadUnaligned(as: UInt32.self))
             }
             
             guard sessionResponseLength > 0 && sessionResponseLength < 1_000_000 else {
@@ -831,7 +836,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             }
             
             let responseLength = lenBuffer.withUnsafeBytes { buffer in
-                CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+                CFSwapInt32BigToHost(buffer.loadUnaligned(as: UInt32.self))
             }
             
             guard responseLength > 0 && responseLength < 1_000_000 else {
@@ -969,7 +974,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         guard bytesRead == headerLength else { return nil }
         
         let header = headerBuffer.withUnsafeBytes { buffer in
-            buffer.load(as: UsbmuxHeader.self)
+            buffer.loadUnaligned(as: UsbmuxHeader.self)
         }
         
         let payloadLength = Int(header.length) - headerLength
@@ -1095,7 +1100,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         guard bytesRead == 4 else { return nil }
         
         let responseLength = lenBuffer.withUnsafeBytes { buffer in
-            CFSwapInt32BigToHost(buffer.load(as: UInt32.self))
+            CFSwapInt32BigToHost(buffer.loadUnaligned(as: UInt32.self))
         }
         
         guard responseLength > 0 && responseLength < 1_000_000 else { return nil }
@@ -1359,7 +1364,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         client.delegate = self
         self.dtxClient = client
         
-        print("[DeviceManager] 啟動原生 DTX 效能監控，UDID: \(udid)")
+        print("[DeviceManager] 啟動原生 DTX 效能監控，DeviceID: \(redactedDeviceIdentifier(udid))")
         
         Task {
             do {
