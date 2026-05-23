@@ -236,6 +236,8 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     private var connectedUDID: String?
     private var connectedVersion: String?
     private var legacyLockdownFd: Int32 = -1
+    private var legacyLockdownReader: CFReadStream?
+    private var legacyLockdownWriter: CFWriteStream?
     private var autoReconnectWorkItem: DispatchWorkItem?
     private var reconnectAttempt: Int = 0
     private var userInitiatedDisconnect = false
@@ -292,9 +294,13 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         dvtStream.stop()
         
         if legacyLockdownFd >= 0 {
+            if let r = legacyLockdownReader { CFReadStreamClose(r) }
+            if let w = legacyLockdownWriter { CFWriteStreamClose(w) }
             Darwin.shutdown(legacyLockdownFd, SHUT_RDWR)
             close(legacyLockdownFd)
             legacyLockdownFd = -1
+            legacyLockdownReader = nil
+            legacyLockdownWriter = nil
         }
         
         rsdEndpoint = nil
@@ -402,15 +408,19 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                     self.connectedVersion = ver
                     
                     // 1. 執行 USBMux 雙穿透，啟動定位模擬服務並獲取 socketFd
-                    let (socketFd, lockFd, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
+                    let (socketFd, lockFd, lockReader, lockWriter, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
                     self.legacyLockdownFd = lockFd
+                    self.legacyLockdownReader = lockReader
+                    self.legacyLockdownWriter = lockWriter
                     
                     // 2. 啟動 dtxClient Legacy 模式
                     let client = DTXClient()
                     client.delegate = self
                     self.dtxClient = client
                     
-                    try await client.startLegacy(socketFd: socketFd, identity: identity)
+                    // 對於 Legacy 裝置，即便 StartService 回報 EnableServiceSSL，
+                    // 實測中通常不需要對服務 Socket 進行 SSL 升級，反而升級會導致斷開。
+                    try await client.startLegacy(socketFd: socketFd, identity: nil) // 傳入 nil 以禁用服務 SSL
                     self.dvtStream.setClient(client)
                     
                     self.setConnectionState(.connected, deviceName: "\(devName) (iOS \(ver))", lastError: nil)
@@ -506,7 +516,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         return pairRecordDict
     }
 
-    private func connectLegacyDeviceLocationService(deviceID: Int, udid: String) async throws -> (Int32, Int32, SecIdentity?) {
+    private func connectLegacyDeviceLocationService(deviceID: Int, udid: String) async throws -> (Int32, Int32, CFReadStream?, CFWriteStream?, SecIdentity?) {
         let socketPath = "/var/run/usbmuxd"
         let addrSize = MemoryLayout<sockaddr_un>.size
         var addr = sockaddr_un()
@@ -913,7 +923,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
         
         self.appendLog("定位服務穿透成功！Socket 已接通。")
-        return (serviceFd, currentFd, establishedIdentity)
+        return (serviceFd, currentFd, reader, writer, establishedIdentity)
     }
 
     private struct UsbmuxHeader {
@@ -1623,9 +1633,13 @@ extension DeviceManager: DTXClientDelegate {
         self.appendLog("⚠️ 原生 DTX 監控連線中斷: \(errorMsg)")
 
         if legacyLockdownFd >= 0 {
+            if let r = legacyLockdownReader { CFReadStreamClose(r) }
+            if let w = legacyLockdownWriter { CFWriteStreamClose(w) }
             Darwin.shutdown(legacyLockdownFd, SHUT_RDWR)
             close(legacyLockdownFd)
             legacyLockdownFd = -1
+            legacyLockdownReader = nil
+            legacyLockdownWriter = nil
         }
 
         self.dtxClient = nil
