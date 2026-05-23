@@ -59,51 +59,51 @@ public class DTXClient: @unchecked Sendable {
         
         print("[DTXClient] 正在以 Legacy (Socket FD: \(socketFd)) 模式啟動")
         
-        // 升級 Socket 為 SSL/TLS 加密通道 (mTLS 雙向認證 / 單向 TLS)
-        print("[DTXClient] 正在為 Legacy 定位 Socket 建立 SSL/TLS 連接...")
-        var readStream: Unmanaged<CFReadStream>?
-        var writeStream: Unmanaged<CFWriteStream>?
-        CFStreamCreatePairWithSocket(kCFAllocatorDefault, socketFd, &readStream, &writeStream)
-        
-        if let rUnmanaged = readStream, let wUnmanaged = writeStream {
-            let r = rUnmanaged.takeRetainedValue()
-            let w = wUnmanaged.takeRetainedValue()
+        if let ident = identity {
+            // 升級 Socket 為 SSL/TLS 加密通道 (mTLS 雙向認證)
+            print("[DTXClient] 正在為 Legacy 定位 Socket 建立 SSL/TLS 連接 (mTLS)...")
+            var readStream: Unmanaged<CFReadStream>?
+            var writeStream: Unmanaged<CFWriteStream>?
+            CFStreamCreatePairWithSocket(kCFAllocatorDefault, socketFd, &readStream, &writeStream)
             
-            var sslSettings: [String: Any] = [
-                kCFStreamSSLIsServer as String: false,
-                kCFStreamSSLValidatesCertificateChain as String: false
-            ]
-            
-            if let ident = identity {
-                sslSettings[kCFStreamSSLCertificates as String] = [ident] as CFArray
-                print("[DTXClient] 正在以雙向認證 (mTLS) 方式升級 SSL/TLS 通道...")
-            } else {
-                print("[DTXClient] 正在以單向認證方式升級 SSL/TLS 通道...")
-            }
-            
-            CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
-            CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
-            
-            CFReadStreamOpen(r)
-            CFWriteStreamOpen(w)
-            
-            // 等待流開啟且 TLS 握手成功 (最多等待 3 秒)
-            var timeoutCount = 0
-            while CFReadStreamGetStatus(r) != .open || CFWriteStreamGetStatus(w) != .open {
-                try? await Task.sleep(nanoseconds: 50_000_000) // 等待 50 毫秒
-                timeoutCount += 1
-                if timeoutCount > 60 { // 3 秒超時
-                    break
+            if let rUnmanaged = readStream, let wUnmanaged = writeStream {
+                let r = rUnmanaged.takeRetainedValue()
+                let w = wUnmanaged.takeRetainedValue()
+                
+                let sslSettings: [String: Any] = [
+                    kCFStreamSSLIsServer as String: false,
+                    kCFStreamSSLCertificates as String: [ident] as CFArray,
+                    kCFStreamSSLValidatesCertificateChain as String: false
+                ]
+                
+                CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+                CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+                
+                CFReadStreamOpen(r)
+                CFWriteStreamOpen(w)
+                
+                // 等待流開啟且 TLS 握手成功 (最多等待 3 秒)
+                var timeoutCount = 0
+                while CFReadStreamGetStatus(r) != .open || CFWriteStreamGetStatus(w) != .open {
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 等待 50 毫秒
+                    timeoutCount += 1
+                    if timeoutCount > 60 { // 3 秒超時
+                        break
+                    }
+                }
+                
+                if CFReadStreamGetStatus(r) == .open && CFWriteStreamGetStatus(w) == .open {
+                    self.sslReader = r
+                    self.sslWriter = w
+                    print("[DTXClient] SSL/TLS 連線建立成功！已進入安全加密傳輸模式。")
+                } else {
+                    print("[DTXClient] 警告：無法開啟 SSL/TLS 加密流，將退回明文連線。")
+                    CFReadStreamClose(r)
+                    CFWriteStreamClose(w)
                 }
             }
-            
-            if CFReadStreamGetStatus(r) == .open && CFWriteStreamGetStatus(w) == .open {
-                self.sslReader = r
-                self.sslWriter = w
-                print("[DTXClient] SSL/TLS 連線建立成功！已進入安全加密傳輸模式。")
-            } else {
-                print("[DTXClient] 警告：無法開啟 SSL/TLS 加密流，將退回明文連線。")
-            }
+        } else {
+            print("[DTXClient] 檢測到 Legacy 模式禁用了 SSL 升級，將以原始 Socket 明文通訊。")
         }
         
         // 背景啟動 Read Loop
