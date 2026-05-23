@@ -109,10 +109,35 @@ public class DTXClient: @unchecked Sendable {
         // 背景啟動 Read Loop
         startReadLoop()
         
+        print("[DTXClient] 開始執行 DTX 初始協議握手流程...")
         // 發起 DTX 通訊流程
         try await runDTXProtocolFlow()
+        print("[DTXClient] DTX 初始協議握手完成。")
+        
+        // 啟動心跳機制 (Heartbeat)，每 5 秒發送一次 Ping，防止連線被設備主動關閉
+        startHeartbeat()
     }
     
+    private func startHeartbeat() {
+        Task { [weak self] in
+            while let self = self, self.isRunning {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 每 5 秒一次
+                guard self.isRunning else { break }
+                print("[DTXClient] 發送心跳 Ping 以維持連線活性...")
+                let pingMsg = try? DTXMessage.makeMethodCall(
+                    identifier: getNextIdentifier(),
+                    channelCode: 0,
+                    selector: "noop:",
+                    arguments: [],
+                    expectsReply: false
+                )
+                if let msg = pingMsg {
+                    _ = try? await self.sendDTXMessage(msg)
+                }
+            }
+        }
+    }
+
     public func stop() {
         stopInternal(error: nil)
     }
@@ -279,6 +304,8 @@ public class DTXClient: @unchecked Sendable {
     
     private func sendDTXMessage(_ msg: DTXMessage) async throws {
         let payload = msg.serialize()
+        print("[DTXClient] 準備發送訊息: ID=\(msg.identifier), Channel=\(msg.channelCode), 長度=\(payload.count)")
+        
         if let nw = nwConnection {
             try await sendNwData(nw, data: payload)
         } else if let w = sslWriter {
@@ -287,8 +314,11 @@ public class DTXClient: @unchecked Sendable {
                     CFWriteStreamWrite(w, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), payload.count)
                 }
                 if bytesWritten != payload.count {
+                    let streamError = CFWriteStreamGetError(w)
+                    print("[DTXClient] SSL 寫入失敗: 代碼=\(streamError.error)")
                     throw NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 寫入失敗"])
                 }
+                print("[DTXClient] SSL 寫入成功: \(bytesWritten) bytes")
             }.value
         } else if socketFd >= 0 {
             try await Task.detached(priority: .userInitiated) { [socketFd] in
@@ -296,8 +326,11 @@ public class DTXClient: @unchecked Sendable {
                     write(socketFd, buffer.baseAddress, payload.count)
                 }
                 if bytesWritten != payload.count {
+                    let err = errno
+                    print("[DTXClient] Socket 寫入失敗: errno=\(err)")
                     throw NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy socket 寫入失敗"])
                 }
+                print("[DTXClient] Socket 寫入成功: \(bytesWritten) bytes")
             }.value
         } else {
             throw NSError(domain: "DTXClient", code: -17, userInfo: [NSLocalizedDescriptionKey: "無有效連線實體"])
@@ -356,6 +389,13 @@ public class DTXClient: @unchecked Sendable {
         Task { [weak self] in
             guard let self = self else { return }
             
+            print("[DTXClient] 啟動背景讀取迴圈...")
+            // 在進入長讀取迴圈前，取消 Socket 的讀取超時限制 (或者設為極大值)，避免頻繁觸發 EAGAIN
+            if self.socketFd >= 0 {
+                var tv = timeval(tv_sec: 0, tv_usec: 0) // 0 代表無限等待
+                setsockopt(self.socketFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+            }
+            
             while self.isRunning {
                 do {
                     // 1. 先讀取 32 bytes DTX Header
@@ -374,19 +414,21 @@ public class DTXClient: @unchecked Sendable {
                     fullPacket.append(bodyData)
                     
                     if let (msg, _) = try DTXMessage.parse(from: fullPacket) {
+                        print("[DTXClient] 收到封包: ID=\(msg.identifier), Channel=\(msg.channelCode), Body=\(bodySize) bytes")
                         self.handleIncomingMessage(msg)
                     }
                     
                 } catch {
                     if self.isRunning {
                         let errorDescription = error.localizedDescription
-                        // 忽略一些常見的、可能在剛建立連線時發生的瞬時錯誤或超時，避免直接斷開
-                        if errorDescription.contains("timeout") || errorDescription.contains("Operation timed out") {
-                            print("[DTXClient] 讀取超時，重試中...")
+                        let nsError = error as NSError
+                        
+                        // EAGAIN (errno 35) 或其它常見的超時錯誤，在長連線中視為正常，繼續等待即可
+                        if nsError.code == 35 || errorDescription.contains("timeout") || errorDescription.contains("Operation timed out") {
                             continue
                         }
 
-                        print("[DTXClient] 讀取迴圈異常中斷: \(errorDescription)")
+                        print("[DTXClient] 讀取迴圈中斷: \(errorDescription) (Code: \(nsError.code))")
                         self.stopInternal(error: error)
                     }
                     break
