@@ -235,6 +235,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
     private var rsdEndpoint: Endpoint?
     private var connectedUDID: String?
     private var connectedVersion: String?
+    private var legacyLockdownFd: Int32 = -1
     private var autoReconnectWorkItem: DispatchWorkItem?
     private var reconnectAttempt: Int = 0
     private var userInitiatedDisconnect = false
@@ -289,6 +290,12 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         
         expectedDvtStreamExit = true
         dvtStream.stop()
+        
+        if legacyLockdownFd >= 0 {
+            Darwin.shutdown(legacyLockdownFd, SHUT_RDWR)
+            close(legacyLockdownFd)
+            legacyLockdownFd = -1
+        }
         
         rsdEndpoint = nil
         connectedUDID = nil
@@ -395,7 +402,8 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                     self.connectedVersion = ver
                     
                     // 1. 執行 USBMux 雙穿透，啟動定位模擬服務並獲取 socketFd
-                    let (socketFd, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
+                    let (socketFd, lockFd, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
+                    self.legacyLockdownFd = lockFd
                     
                     // 2. 啟動 dtxClient Legacy 模式
                     let client = DTXClient()
@@ -498,7 +506,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         return pairRecordDict
     }
 
-    private func connectLegacyDeviceLocationService(deviceID: Int, udid: String) async throws -> (Int32, SecIdentity?) {
+    private func connectLegacyDeviceLocationService(deviceID: Int, udid: String) async throws -> (Int32, Int32, SecIdentity?) {
         let socketPath = "/var/run/usbmuxd"
         let addrSize = MemoryLayout<sockaddr_un>.size
         var addr = sockaddr_un()
@@ -781,9 +789,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 self.appendLog("SSL 寫入 StartService 失敗。")
             }
             
-            // 關閉 SSL 流
-            CFReadStreamClose(r)
-            CFWriteStreamClose(w)
+            // 這裡不再主動關閉 SSL 流或 currentFd，交給外部保持 alive
         } else {
             // 備用的明文通訊邏輯
             guard let reqData = try? PropertyListSerialization.data(fromPropertyList: startServiceRequest, format: .xml, options: 0) else {
@@ -907,7 +913,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         }
         
         self.appendLog("定位服務穿透成功！Socket 已接通。")
-        return (serviceFd, establishedIdentity)
+        return (serviceFd, currentFd, establishedIdentity)
     }
 
     private struct UsbmuxHeader {
@@ -1615,6 +1621,13 @@ extension DeviceManager: DTXClientDelegate {
         }
 
         self.appendLog("⚠️ 原生 DTX 監控連線中斷: \(errorMsg)")
+
+        if legacyLockdownFd >= 0 {
+            Darwin.shutdown(legacyLockdownFd, SHUT_RDWR)
+            close(legacyLockdownFd)
+            legacyLockdownFd = -1
+        }
+
         self.dtxClient = nil
         self.systemInfo = IOSSystemInfo()
     }

@@ -114,10 +114,13 @@ public class DTXClient: @unchecked Sendable {
     }
     
     public func stop() {
+        stopInternal(error: nil)
+    }
+
+    private func stopInternal(error: Error?) {
         guard isRunning else { return }
         isRunning = false
-        
-        print("[DTXClient] 正在停止監控連線")
+        print("[DTXClient] 正在停止連線服務... \(error?.localizedDescription ?? "正常停止")")
         
         if let nw = nwConnection {
             nw.cancel()
@@ -134,12 +137,14 @@ public class DTXClient: @unchecked Sendable {
         }
         
         if socketFd >= 0 {
+            Darwin.shutdown(socketFd, SHUT_RDWR)
             close(socketFd)
             socketFd = -1
         }
         
+        let currentDelegate = self.delegate
         Task { @MainActor in
-            delegate?.dtxClient(self, didDisconnectWithError: nil)
+            currentDelegate?.dtxClient(self, didDisconnectWithError: error)
         }
     }
     
@@ -308,8 +313,13 @@ public class DTXClient: @unchecked Sendable {
                 var totalBytes = 0
                 while totalBytes < length {
                     let readChunk = CFReadStreamRead(r, &buffer[totalBytes], length - totalBytes)
-                    if readChunk <= 0 {
-                        throw NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 斷開"])
+                    if readChunk < 0 {
+                        let streamError = CFReadStreamGetError(r)
+                        throw NSError(domain: "DTXClient", code: Int(streamError.error), userInfo: [
+                            NSLocalizedDescriptionKey: "Legacy SSL socket 讀取失敗 (代碼: \(streamError.error), domain: \(streamError.domain))"
+                        ])
+                    } else if readChunk == 0 {
+                        throw NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 斷開 (EOF)"])
                     }
                     totalBytes += readChunk
                 }
@@ -321,8 +331,13 @@ public class DTXClient: @unchecked Sendable {
                 var totalBytes = 0
                 while totalBytes < length {
                     let readChunk = read(socketFd, &buffer[totalBytes], length - totalBytes)
-                    if readChunk <= 0 {
-                        throw NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy socket 斷開"])
+                    if readChunk < 0 {
+                        let err = errno
+                        throw NSError(domain: "DTXClient", code: Int(err), userInfo: [
+                            NSLocalizedDescriptionKey: "Legacy socket 讀取失敗 (errno: \(err))"
+                        ])
+                    } else if readChunk == 0 {
+                        throw NSError(domain: "DTXClient", code: -18, userInfo: [NSLocalizedDescriptionKey: "Legacy socket 斷開 (EOF)"])
                     }
                     totalBytes += readChunk
                 }
@@ -372,10 +387,7 @@ public class DTXClient: @unchecked Sendable {
                         }
 
                         print("[DTXClient] 讀取迴圈異常中斷: \(errorDescription)")
-                        self.stop()
-                        Task { @MainActor in
-                            self.delegate?.dtxClient(self, didDisconnectWithError: error)
-                        }
+                        self.stopInternal(error: error)
                     }
                     break
                 }
