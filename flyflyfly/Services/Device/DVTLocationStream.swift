@@ -70,11 +70,14 @@ final class DVTLocationStream: DVTStreaming, @unchecked Sendable {
     }
 
     func stop() {
+        let wasReady = readyState()
         setReady(false)
         currentHost = nil
         currentPort = nil
-        Task {
-            try? await dtxClient?.stopLocationSimulation()
+        if wasReady {
+            Task {
+                try? await dtxClient?.stopLocationSimulation()
+            }
         }
     }
 
