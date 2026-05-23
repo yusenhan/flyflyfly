@@ -132,13 +132,17 @@ public class DTXClient: @unchecked Sendable {
             log("檢測到 Legacy 模式未提供 SSL 憑證，將以原始 Socket 明文通訊。")
         }
         
-        startReadLoop()
-        
-        log("開始執行 DTX 初始協議握手流程...")
-        try await runDTXProtocolFlow()
-        log("DTX 初始協議握手完成。")
-        
-        startHeartbeat()
+        if !isLegacy {
+            startReadLoop()
+            
+            log("開始執行 DTX 初始協議握手流程...")
+            try await runDTXProtocolFlow()
+            log("DTX 初始協議握手完成。")
+            
+            startHeartbeat()
+        } else {
+            log("Legacy 模式：獨立定位服務已安全開啟，直接就緒。")
+        }
     }
     
     private func startHeartbeat() {
@@ -318,6 +322,40 @@ public class DTXClient: @unchecked Sendable {
                 }
             }.value
             log("Socket 寫入成功: \(payload.count) bytes")
+        } else {
+            throw NSError(domain: "DTXClient", code: -17, userInfo: [NSLocalizedDescriptionKey: "無有效連線實體"])
+        }
+    }
+    
+    private func sendRawData(_ payload: Data) async throws {
+        log("準備發送原始數據，長度=\(payload.count)")
+        if let nw = nwConnection {
+            try await sendNwData(nw, data: payload)
+        } else if let w = sslWriter {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                writeQueue.async {
+                    let bytesWritten = payload.withUnsafeBytes { buffer in
+                        CFWriteStreamWrite(w, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), payload.count)
+                    }
+                    if bytesWritten != payload.count {
+                        continuation.resume(throwing: NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 寫入失敗"]))
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
+            log("SSL 寫入原始數據成功: \(payload.count) bytes")
+        } else if socketFd >= 0 {
+            let currentSocketFd = self.socketFd
+            try await Task.detached(priority: .userInitiated) { [currentSocketFd, payload] in
+                let bytesWritten = payload.withUnsafeBytes { buffer in
+                    write(currentSocketFd, buffer.baseAddress, payload.count)
+                }
+                if bytesWritten != payload.count {
+                    throw NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy socket 寫入失敗"])
+                }
+            }.value
+            log("Socket 寫入原始數據成功: \(payload.count) bytes")
         } else {
             throw NSError(domain: "DTXClient", code: -17, userInfo: [NSLocalizedDescriptionKey: "無有效連線實體"])
         }
@@ -509,14 +547,35 @@ public class DTXClient: @unchecked Sendable {
     
     public func simulateLocation(latitude: Double, longitude: Double) async throws {
         guard isRunning else { throw NSError(domain: "DTXClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "DTXClient 未連線"]) }
+        
+        if isLegacy {
+            // Legacy 模式使用自定義二進位 Plist/String 協定
+            let latStr = String(format: "%.6f", latitude)
+            let lonStr = String(format: "%.6f", longitude)
+            guard let latBytes = latStr.data(using: .utf8),
+                  let lonBytes = lonStr.data(using: .utf8) else {
+                throw NSError(domain: "DTXClient", code: -3, userInfo: [NSLocalizedDescriptionKey: "無法序列化經緯度字串"])
+            }
+            
+            var sendData = Data()
+            sendData.appendUInt32Big(0) // 0 表示設定定位
+            sendData.appendUInt32Big(UInt32(latBytes.count))
+            sendData.append(latBytes)
+            sendData.appendUInt32Big(UInt32(lonBytes.count))
+            sendData.append(lonBytes)
+            
+            try await sendRawData(sendData)
+            return
+        }
+        
+        // iOS 17+ RSD 模式
         let latNum = NSNumber(value: latitude)
         let lonNum = NSNumber(value: longitude)
         let latData = try NSKeyedArchiver.archivedData(withRootObject: latNum, requiringSecureCoding: false)
         let lonData = try NSKeyedArchiver.archivedData(withRootObject: lonNum, requiringSecureCoding: false)
-        let channel: Int32 = isLegacy ? 1 : 2
         let msg = try DTXMessage.makeMethodCall(
             identifier: getNextIdentifier(),
-            channelCode: channel,
+            channelCode: 2,
             selector: "simulateLocationWithLatitude:longitude:",
             arguments: [.buffer(latData), .buffer(lonData)],
             expectsReply: true
@@ -526,10 +585,19 @@ public class DTXClient: @unchecked Sendable {
 
     public func stopLocationSimulation() async throws {
         guard isRunning else { throw NSError(domain: "DTXClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "DTXClient 未連線"]) }
-        let channel: Int32 = isLegacy ? 1 : 2
+        
+        if isLegacy {
+            // Legacy 模式使用自定義二進位 Plist/String 協定
+            var sendData = Data()
+            sendData.appendUInt32Big(1) // 1 表示停止定位
+            try await sendRawData(sendData)
+            return
+        }
+        
+        // iOS 17+ RSD 模式
         let msg = try DTXMessage.makeMethodCall(
             identifier: getNextIdentifier(),
-            channelCode: channel,
+            channelCode: 2,
             selector: "stopLocationSimulation",
             arguments: [],
             expectsReply: true
