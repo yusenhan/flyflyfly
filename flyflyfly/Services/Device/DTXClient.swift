@@ -33,6 +33,22 @@ public class DTXClient: @unchecked Sendable {
     private var sslWriter: CFWriteStream?
     private var identity: SecIdentity?
     
+    // 心跳與閒置檢測
+    private let sendTimeLock = NSLock()
+    private var _lastSendTime: Date = Date()
+    private var lastSendTime: Date {
+        get {
+            sendTimeLock.lock()
+            defer { sendTimeLock.unlock() }
+            return _lastSendTime
+        }
+        set {
+            sendTimeLock.lock()
+            _lastSendTime = newValue
+            sendTimeLock.unlock()
+        }
+    }
+    
     private var currentBuffer = Data()
     
     public init() {}
@@ -90,26 +106,13 @@ public class DTXClient: @unchecked Sendable {
                 CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
                 CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
                 
-                // 在各自專屬的執行緒隊列中非同步並行開啟 Stream，保證 CFStream 執行緒安全
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    let group = DispatchGroup()
-                    
-                    group.enter()
-                    readQueue.async {
-                        CFReadStreamOpen(r)
-                        group.leave()
-                    }
-                    
-                    group.enter()
-                    writeQueue.async {
-                        CFWriteStreamOpen(w)
-                        group.leave()
-                    }
-                    
-                    group.notify(queue: .global()) {
-                        continuation.resume()
-                    }
-                }
+                // 核心修復：將 SSL/TLS Stream 排程至具有事件循環的主 RunLoop，以確保底層的 SSL/TLS 握手事件可以正常非同步且成功完成！
+                CFReadStreamScheduleWithRunLoop(r, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+                CFWriteStreamScheduleWithRunLoop(w, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+                
+                // 直接同步開啟 Stream，這會自動在主 RunLoop 註冊並觸發 SSL 握手
+                CFReadStreamOpen(r)
+                CFWriteStreamOpen(w)
                 
                 var timeoutCount = 0
                 while CFReadStreamGetStatus(r) != .open || CFWriteStreamGetStatus(w) != .open {
@@ -143,6 +146,13 @@ public class DTXClient: @unchecked Sendable {
         } else {
             log("Legacy 模式：獨立定位服務已安全開啟，直接就緒。")
             log("Legacy 模式：定位服務為寫入型通道，略過背景讀取探測以避免誤判 EPIPE。")
+            
+            // 啟動 Legacy 排水與讀取迴圈
+            startLegacyReadLoop()
+            
+            // ⚠️ 註解掉 Legacy 心跳：因為發送 Command 1 (Stop Location Simulation) 的心跳在 iOS 舊設備端會直接觸發關閉 Socket (EOF)。
+            // 由於 DeviceManager 已具備每 5 秒的 Lockdownd SSL 會話心跳，定位服務已能保持永遠存活，故無需在此發送定位心跳。
+            // startLegacyHeartbeat()
         }
     }
     
@@ -181,10 +191,12 @@ public class DTXClient: @unchecked Sendable {
         }
         
         if let r = sslReader {
+            CFReadStreamUnscheduleFromRunLoop(r, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
             CFReadStreamClose(r)
             sslReader = nil
         }
         if let w = sslWriter {
+            CFWriteStreamUnscheduleFromRunLoop(w, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
             CFWriteStreamClose(w)
             sslWriter = nil
         }
@@ -332,6 +344,7 @@ public class DTXClient: @unchecked Sendable {
         log("準備發送原始數據，長度=\(payload.count)")
         if let nw = nwConnection {
             try await sendNwData(nw, data: payload)
+            self.lastSendTime = Date()
         } else if let w = sslWriter {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 writeQueue.async {
@@ -339,13 +352,20 @@ public class DTXClient: @unchecked Sendable {
                         CFWriteStreamWrite(w, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), payload.count)
                     }
                     if bytesWritten != payload.count {
-                        continuation.resume(throwing: NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: "Legacy SSL socket 寫入失敗"]))
+                        var errStr = "Legacy SSL socket 寫入失敗"
+                        if let cfErr = CFWriteStreamCopyError(w) {
+                            let code = CFErrorGetCode(cfErr)
+                            let domain = CFErrorGetDomain(cfErr) as String
+                            errStr += " (CFError code: \(code), domain: \(domain))"
+                        }
+                        continuation.resume(throwing: NSError(domain: "DTXClient", code: -16, userInfo: [NSLocalizedDescriptionKey: errStr]))
                     } else {
                         continuation.resume()
                     }
                 }
             }
             log("SSL 寫入原始數據成功: \(payload.count) bytes")
+            self.lastSendTime = Date()
         } else if socketFd >= 0 {
             let currentSocketFd = self.socketFd
             try await Task.detached(priority: .userInitiated) { [currentSocketFd, payload] in
@@ -357,6 +377,7 @@ public class DTXClient: @unchecked Sendable {
                 }
             }.value
             log("Socket 寫入原始數據成功: \(payload.count) bytes")
+            self.lastSendTime = Date()
         } else {
             throw NSError(domain: "DTXClient", code: -17, userInfo: [NSLocalizedDescriptionKey: "無有效連線實體"])
         }
@@ -442,6 +463,61 @@ public class DTXClient: @unchecked Sendable {
                             continue
                         }
                         log("讀取迴圈中斷: \(error.localizedDescription) (Code: \(nsError.code))")
+                        self.stopInternal(error: error)
+                    }
+                    break
+                }
+            }
+        }
+    }
+    
+    private func startLegacyReadLoop() {
+        Task { [weak self] in
+            guard let self = self else { return }
+            log("啟動 Legacy 背景讀取與排水迴圈...")
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while self.isRunning {
+                do {
+                    if let r = self.sslReader {
+                        // 以非阻塞且執行緒安全非同步方式讀取可用數據
+                        let readBytes = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, Error>) in
+                            readQueue.async {
+                                let res = CFReadStreamRead(r, &buffer, buffer.count)
+                                if res < 0 {
+                                    let streamError = CFReadStreamGetError(r)
+                                    continuation.resume(throwing: NSError(domain: "DTXClient", code: Int(streamError.error), userInfo: [
+                                        NSLocalizedDescriptionKey: "Legacy SSL 讀取錯誤: \(streamError.error)"
+                                    ]))
+                                } else {
+                                    continuation.resume(returning: res)
+                                }
+                            }
+                        }
+                        if readBytes == 0 {
+                            log("ℹ️ Legacy SSL 連線由裝置端正常關閉 (EOF)")
+                            self.stopInternal(error: nil)
+                            break
+                        }
+                        log("Legacy 模式收到裝置響應數據：\(readBytes) 位元組")
+                    } else if self.socketFd >= 0 {
+                        let currentSocketFd = self.socketFd
+                        let readBytes = try await Task.detached(priority: .userInitiated) {
+                            var buf = [UInt8](repeating: 0, count: 1024)
+                            let res = read(currentSocketFd, &buf, buf.count)
+                            return res
+                        }.value
+                        if readBytes <= 0 {
+                            log("ℹ️ Legacy Socket 連線已斷開 (EOF)")
+                            self.stopInternal(error: nil)
+                            break
+                        }
+                        log("Legacy 模式收到裝置響應數據：\(readBytes) 位元組")
+                    } else {
+                        try await Task.sleep(nanoseconds: 100_000_000)
+                    }
+                } catch {
+                    if self.isRunning {
+                        log("Legacy 讀取迴圈中報錯: \(error.localizedDescription)")
                         self.stopInternal(error: error)
                     }
                     break
@@ -551,6 +627,7 @@ public class DTXClient: @unchecked Sendable {
         
         if isLegacy {
             // Legacy 模式使用自定義二進位 Plist/String 協定
+            log("Debug: (Legacy) 準備寫入位置座標... 緯度: \(latitude), 經度: \(longitude)")
             let latStr = String(format: "%.6f", latitude)
             let lonStr = String(format: "%.6f", longitude)
             guard let latBytes = latStr.data(using: .utf8),
@@ -604,6 +681,26 @@ public class DTXClient: @unchecked Sendable {
             expectsReply: true
         )
         try await sendDTXMessage(msg)
+    }
+    
+    private func startLegacyHeartbeat() {
+        Task { [weak self] in
+            while let self = self, self.isRunning {
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // check every 3s
+                guard self.isRunning else { break }
+                let elapsed = Date().timeIntervalSince(self.lastSendTime)
+                if elapsed < 4.5 { continue } // skip if actively transmitting
+                
+                log("通道閒置已達 \(String(format: "%.1f", elapsed)) 秒，發送 Legacy 心跳 Ping (Command 1)...")
+                do {
+                    var sendData = Data()
+                    sendData.appendUInt32Big(1) // 1 = stop location (keepalive)
+                    try await self.sendRawData(sendData)
+                } catch {
+                    log("Legacy 心跳發送失敗: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
     private func getNextIdentifier() -> UInt32 {

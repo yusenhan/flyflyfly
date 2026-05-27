@@ -9,7 +9,7 @@ STAGING_DIR="${BUILD_ROOT}/staging"
 APP_NAME="flyflyfly"
 PROJECT_PATH="${ROOT_DIR}/${APP_NAME}.xcodeproj"
 APP_PATH="${DERIVED_DATA_DIR}/Build/Products/Release/${APP_NAME}.app"
-DMG_PATH="${ROOT_DIR}/${APP_NAME}.dmg"
+DMG_PATH="${ROOT_DIR}/build/dmg/${APP_NAME}.dmg"
 TEMP_DMG_PATH="${BUILD_ROOT}/${APP_NAME}-temp.dmg"
 VOLUME_NAME="${APP_NAME}"
 
@@ -41,6 +41,11 @@ rm -f "${APP_PATH}/Contents/Resources/settings.local.json"
 echo "[INFO] Preparing DMG staging directory..."
 cp -R "${APP_PATH}" "${STAGING_DIR}/${APP_NAME}.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
+
+echo "[INFO] Copying Release app bundle to build/release..."
+mkdir -p "${ROOT_DIR}/build/release"
+rm -rf "${ROOT_DIR}/build/release/${APP_NAME}.app"
+cp -R "${APP_PATH}" "${ROOT_DIR}/build/release/${APP_NAME}.app"
 
 rm -f "${DMG_PATH}" "${TEMP_DMG_PATH}"
 

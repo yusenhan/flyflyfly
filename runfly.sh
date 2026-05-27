@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 運行固定路徑的 flyflyfly App Release 版本。
-RELEASE_APP="/private/tmp/flyflyfly-derived-release/Build/Products/Release/flyflyfly.app"
+# 運行 build 目錄下的 flyflyfly App Release 版本。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELEASE_APP="${SCRIPT_DIR}/build/release/flyflyfly.app"
 APP_EXECUTABLE="${RELEASE_APP}/Contents/MacOS/flyflyfly"
 
 if [[ ! -d "${RELEASE_APP}" ]]; then

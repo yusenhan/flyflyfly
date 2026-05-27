@@ -191,7 +191,7 @@ struct DeviceStatusSectionView: View {
                 .padding(.top, 4)
             }
 
-            if !vm.deviceManager.debugLog.isEmpty && !vm.isActiveSimulationRunning {
+            if !vm.deviceManager.debugLog.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: { withAnimation { isShowingLogs.toggle() } }) {
                         HStack {

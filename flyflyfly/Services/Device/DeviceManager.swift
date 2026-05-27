@@ -186,6 +186,14 @@ struct TunnelOutputParser {
 }
 
 @MainActor
+private final class WeakDeviceManager: @unchecked Sendable {
+    weak var manager: DeviceManager?
+    init(_ manager: DeviceManager) {
+        self.manager = manager
+    }
+}
+
+@MainActor
 final class DeviceManager: ObservableObject, DeviceControlling {
     @Published private(set) var connectionState: DeviceConnectionState = .disconnected
     @Published var systemInfo: IOSSystemInfo = IOSSystemInfo()
@@ -273,9 +281,16 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         
         usbmuxMonitor.startMonitoring()
         
+        let bridge = WeakDeviceManager(self)
+        dvtStream.onLog = { msg in
+            Task { @MainActor in
+                bridge.manager?.appendLog(msg)
+            }
+        }
+        
         usbmuxMonitor.$devices
-            .sink { [weak self] newDevices in
-                self?.handleMuxDevicesChanged(newDevices)
+            .sink { newDevices in
+                bridge.manager?.handleMuxDevicesChanged(newDevices)
             }
             .store(in: &monitorCancellables)
     }
@@ -292,6 +307,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         
         expectedDvtStreamExit = true
         dvtStream.stop()
+        dvtStream.onSendLegacy = nil
         
         if legacyLockdownFd >= 0 {
             if let r = legacyLockdownReader { CFReadStreamClose(r) }
@@ -372,6 +388,13 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
     private func connectDeviceInternal(autoTriggered: Bool, force: Bool) async {
         guard force || !isConnected else { return }
+        if self.isConnectionInFlight {
+            self.appendLog("已有連線流程進行中，略過重複請求")
+            return
+        }
+        self.isConnectionInFlight = true
+        defer { self.isConnectionInFlight = false }
+
         if !autoTriggered {
             cancelAutoReconnect()
             appendLog("開始連線 Apple 裝置")
@@ -381,13 +404,6 @@ final class DeviceManager: ObservableObject, DeviceControlling {
             setConnectionState(.connecting(step: "自動重連中"), deviceName: "重新連線中…", lastError: nil)
             appendLog("執行自動重連（第 \(reconnectAttempt) 次）")
         }
-
-        if self.isConnectionInFlight {
-            self.appendLog("已有連線流程進行中，略過重複請求")
-            return
-        }
-        self.isConnectionInFlight = true
-        defer { self.isConnectionInFlight = false }
 
         do {
             // 優先檢查是否有已連接的 USBMux 實體設備
@@ -406,30 +422,36 @@ final class DeviceManager: ObservableObject, DeviceControlling {
                 let isLegacyDevice = isVersionLegacy(ver)
                 
                 if isLegacyDevice {
-                    self.appendLog("偵測到已連接的 Legacy 裝置：\(devName) (系統: \(ver), DeviceID: \(self.redactedDeviceIdentifier(udid)))，啟動純 Swift 原生直連通道...")
-                    self.setStage("啟動 Legacy 直連")
+                    self.appendLog("偵測到已連接的 Legacy 裝置：\(devName) (系統: \(ver), DeviceID: \(self.redactedDeviceIdentifier(udid)))，進行連線憑證驗證...")
+                    self.setStage("驗證 Legacy 憑證")
                     
                     self.connectedUDID = udid
                     self.connectedVersion = ver
                     
-                    // 1. 執行 USBMux 雙穿透，啟動定位模擬服務並獲取 socketFd
-                    let (socketFd, lockFd, lockReader, lockWriter, identity) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
-                    self.legacyLockdownFd = lockFd
-                    self.legacyLockdownReader = lockReader
-                    self.legacyLockdownWriter = lockWriter
+                    // 1. 執行一次性 USBMux 雙穿透，測試啟動定位模擬服務並驗證憑證
+                    let (socketFd, lockFd, lockReader, lockWriter, _) = try await connectLegacyDeviceLocationService(deviceID: devID, udid: udid)
                     
-                    // 2. 啟動 dtxClient Legacy 模式
-                    let client = DTXClient()
-                    client.delegate = self
-                    self.dtxClient = client
+                    // 測試連線驗證成功後，立刻關閉該測試 Socket 和 lockdownd 會話，不佔用/不殘留任何長連線
+                    if let r = lockReader { CFReadStreamClose(r) }
+                    if let w = lockWriter { CFWriteStreamClose(w) }
+                    Darwin.shutdown(lockFd, SHUT_RDWR)
+                    close(lockFd)
+                    close(socketFd)
                     
-                    // 對於 Legacy 裝置，若 StartService 指示 EnableServiceSSL，我們應帶入 identity 進行握手。
-                    // 之前嘗試禁用 SSL 是為了排查 EOF，但若 iOS 強制要求 SSL，明文連線會直接被切斷。
-                    try await client.startLegacy(socketFd: socketFd, identity: identity)
-                    self.dvtStream.setClient(client)
+                    self.dvtStream.onSendLegacy = { @MainActor [weak self] lat, lon in
+                        guard let self = self else { return }
+                        self.appendLog("Debug: 開始執行 Legacy One-Shot 定位座標寫入流程...")
+                        Task {
+                            do {
+                                try await self.sendOneShotLegacyLocation(latitude: lat, longitude: lon, deviceID: devID, udid: udid)
+                            } catch {
+                                self.appendLog("⚠️ Legacy One-Shot 定位寫入失敗: \(error.localizedDescription)")
+                            }
+                        }
+                    }
                     
                     self.setConnectionState(.connected, deviceName: "\(devName) (iOS \(ver))", lastError: nil)
-                    self.appendLog("Legacy 裝置直連成功！定位服務已準備就緒。")
+                    self.appendLog("Legacy 裝置連線驗證成功！隨選定位功能已準備就緒。")
                     self.cancelAutoReconnect()
                     self.reconnectAttempt = 0
                     return
@@ -1395,6 +1417,149 @@ final class DeviceManager: ObservableObject, DeviceControlling {
         dtxClient?.stop()
         dtxClient = nil
         systemInfo = IOSSystemInfo()
+    }
+    
+    private func cleanupLegacyLockdown() {
+        if legacyLockdownFd >= 0 {
+            self.appendLog("Debug: 關閉已完成任務的 Lockdownd 會話以防止超時...")
+            if let r = legacyLockdownReader {
+                CFReadStreamClose(r)
+                legacyLockdownReader = nil
+            }
+            if let w = legacyLockdownWriter {
+                CFWriteStreamClose(w)
+                legacyLockdownWriter = nil
+            }
+            Darwin.shutdown(legacyLockdownFd, SHUT_RDWR)
+            close(legacyLockdownFd)
+            legacyLockdownFd = -1
+        }
+    }
+    
+    private func startLegacyLockdownHeartbeat() {
+        Task { [weak self] in
+            self?.appendLog("Debug: 啟動 Legacy Lockdownd Keep-Alive 心跳定時器...")
+            while let self = self {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 每 5 秒
+                
+                // 檢查 lockdownd 是否依然有效
+                guard self.connectionState == .connected, self.legacyLockdownFd >= 0 else {
+                    self.appendLog("Debug: Legacy Lockdownd 心跳偵測到連線已非 Connected，自動結束心跳。")
+                    break
+                }
+                
+                guard let w = self.legacyLockdownWriter, let r = self.legacyLockdownReader else {
+                    self.appendLog("Debug: Legacy Lockdownd 心跳偵測到 SSL 流為空，自動結束心跳。")
+                    break
+                }
+                
+                self.appendLog("Debug: 發送 Legacy Lockdownd Keep-Alive Ping (QueryType)...")
+                let queryRequest: [String: Any] = [
+                    "Request": "QueryType"
+                ]
+                
+                let success = self.writePlistToStream(w, plist: queryRequest)
+                if success {
+                    if let _ = self.readPlistFromStream(r) {
+                        self.appendLog("Debug: Legacy Lockdownd Keep-Alive Ping 成功！")
+                    } else {
+                        self.appendLog("⚠️ Legacy Lockdownd Keep-Alive Ping 讀取回應失敗！")
+                    }
+                } else {
+                    self.appendLog("⚠️ Legacy Lockdownd Keep-Alive Ping 寫入失敗！")
+                }
+            }
+        }
+    }
+
+    private func sendOneShotLegacyLocation(latitude: Double, longitude: Double, deviceID: Int, udid: String) async throws {
+        // 1. 建立臨時定位連線
+        let (serviceFd, lockFd, lockReader, lockWriter, identity) = try await connectLegacyDeviceLocationService(deviceID: deviceID, udid: udid)
+        
+        defer {
+            // 保障無論如何都會釋放這一次的臨時資源
+            if let lockR = lockReader { CFReadStreamClose(lockR) }
+            if let lockW = lockWriter { CFWriteStreamClose(lockW) }
+            Darwin.shutdown(lockFd, SHUT_RDWR)
+            close(lockFd)
+        }
+        
+        // 2. 準備 31 bytes 的二進位定位數據
+        let latStr = String(format: "%.6f", latitude)
+        let lonStr = String(format: "%.6f", longitude)
+        guard let latBytes = latStr.data(using: .utf8),
+              let lonBytes = lonStr.data(using: .utf8) else {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -3, userInfo: [NSLocalizedDescriptionKey: "無法序列化經緯度字串"])
+        }
+        
+        var op = CFSwapInt32HostToBig(UInt32(0))
+        var latLen = CFSwapInt32HostToBig(UInt32(latBytes.count))
+        var lonLen = CFSwapInt32HostToBig(UInt32(lonBytes.count))
+        
+        var sendData = Data()
+        withUnsafePointer(to: &op) { sendData.append(UnsafeBufferPointer(start: $0, count: 1)) }
+        withUnsafePointer(to: &latLen) { sendData.append(UnsafeBufferPointer(start: $0, count: 1)) }
+        sendData.append(latBytes)
+        withUnsafePointer(to: &lonLen) { sendData.append(UnsafeBufferPointer(start: $0, count: 1)) }
+        sendData.append(lonBytes)
+        
+        var readStream: Unmanaged<CFReadStream>?
+        var writeStream: Unmanaged<CFWriteStream>?
+        CFStreamCreatePairWithSocket(kCFAllocatorDefault, serviceFd, &readStream, &writeStream)
+        
+        guard let r = readStream?.takeRetainedValue(),
+              let w = writeStream?.takeRetainedValue() else {
+            close(serviceFd)
+            throw NSError(domain: "DeviceManager", code: -24, userInfo: [NSLocalizedDescriptionKey: "無法創建定位服務 CFStream"])
+        }
+        
+        // 3. 設定 SSL (mTLS) 參數並排程在主 RunLoop
+        if let ident = identity {
+            let sslSettings: [String: Any] = [
+                kCFStreamSSLIsServer as String: false,
+                kCFStreamSSLCertificates as String: [ident] as CFArray,
+                kCFStreamSSLValidatesCertificateChain as String: false
+            ]
+            CFReadStreamSetProperty(r, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+            CFWriteStreamSetProperty(w, CFStreamPropertyKey(rawValue: kCFStreamPropertySSLSettings), sslSettings as CFTypeRef)
+            
+            CFReadStreamScheduleWithRunLoop(r, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+            CFWriteStreamScheduleWithRunLoop(w, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+        }
+        
+        CFReadStreamOpen(r)
+        CFWriteStreamOpen(w)
+        
+        var timeoutCount = 0
+        while CFReadStreamGetStatus(r) != .open || CFWriteStreamGetStatus(w) != .open {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            timeoutCount += 1
+            if timeoutCount > 60 { break }
+        }
+        
+        // 4. 發送數據
+        let bytesWritten = sendData.withUnsafeBytes { buffer in
+            CFWriteStreamWrite(w, buffer.baseAddress?.assumingMemoryBound(to: UInt8.self), sendData.count)
+        }
+        
+        if bytesWritten != sendData.count {
+            self.appendLog("⚠️ One-Shot 寫入定位資料失敗！")
+        } else {
+            self.appendLog("Debug: One-Shot SSL 寫入定位資料成功，長度=\(sendData.count) 位元組")
+        }
+        
+        // 5. 排水並等待設備接收 (ACK 通常由設備直接 EOF，所以我們不需要讀取 ACK，直接等待設備處理完成)
+        try? await Task.sleep(nanoseconds: 200_000_000) // 等待 200ms 確保 TCP 緩衝區發送完畢
+        
+        // 6. 乾淨地釋放所有臨時連線資源
+        if identity != nil {
+            CFReadStreamUnscheduleFromRunLoop(r, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+            CFWriteStreamUnscheduleFromRunLoop(w, CFRunLoopGetMain(), CFRunLoopMode.commonModes)
+        }
+        CFReadStreamClose(r)
+        CFWriteStreamClose(w)
+        close(serviceFd)
     }
 
     private func appendLog(_ text: String) {
