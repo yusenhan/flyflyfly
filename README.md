@@ -118,8 +118,22 @@ graph TD
    git clone https://github.com/flyflyfly/flyflyfly.git
    cd flyflyfly
    ```
-2. **開啟並編譯**：
-   雙擊開啟 `flyflyfly.xcodeproj`，在 Xcode 中選擇主 Scheme，點擊 **Run (⌘R)** 即可直接以原生方式在 Debug/Release 配置下編譯並運行 App！
+2. **自動化編譯與建置**（推薦）：
+   在專案根目錄一鍵執行重建與編譯腳本，即可在本地自動進行 Debug/Release 雙配置編譯，並生成淨化後的 DMG 安裝套件：
+   ```bash
+   ./rebuild.sh
+   ```
+   編譯產物將統一輸出於根目錄的 `build/` 資料夾下：
+   - `build/debug/flyflyfly.app` - 用於開發與調試的 Debug 配置版本
+   - `build/release/flyflyfly.app` - 具備高級優化的完整生產 Release 版本
+   - `build/dmg/flyflyfly.dmg` - 包含拖拽安裝功能的磁碟映像發布套件
+3. **Xcode 手動開發**：
+   雙擊開啟 `flyflyfly.xcodeproj`，在 Xcode 中選擇主 Scheme，點擊 **Run (⌘R)** 即可直接以原生方式進行 Debug 調試與運行！
+
+### 🛠️ 開發與提交規範
+為了保障專案的穩定性與提交紀錄完整度，請全體開發人員與 AI 智能體嚴格遵守以下規範：
+*   **開發階段 (Development)**：僅建置 **Debug** 配置進行測試。保持 Git 提交在本地（不推送至 GitHub）。
+*   **發佈與提交 (Release & Push)**：確認功能無誤後，必須完整編譯 **Release** 與 **dmg** 兩種配置，將更新的變更細節以繁體中文詳細記錄於 `git_change_log.md` 中，隨後方可執行 `git push` 上傳至遠端倉庫。
 
 ---
 

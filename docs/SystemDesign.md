@@ -52,5 +52,6 @@ flyflyfly 目前採用 **Swift 原生 DTX/USBMux 通訊核心**，定位注入�
 ---
 
 ## 5. 編譯與分發
-*   專案直接利用原生 Xcode 建置系統編譯。
-*   建置應同時驗證 Debug 與 Release。專案目前包含 Swift、Objective-C++ 與 C++ sources，需確保 bridging header 與 C++ 檔案在兩種配置下都能正常編譯。
+*   **一鍵自動化建置**：專案根目錄提供了一鍵自動化建置腳本 `./rebuild.sh`，會自動授權並調用 `scripts/build.sh` 與 `scripts/build-dmg.sh`。
+*   **Debug & Release 雙重編譯**：建置流程會同時在 Debug 與 Release 配置下進行編譯驗證，並統一產出與管理於專案根目錄的 `build/` 資料夾中（分別為 `build/debug/`、`build/release/` 與 `build/dmg/`）。
+*   **DMG 封裝與淨化**：建置指令會自動對產出的 `.app` 套件進行發布前的淨化（清除 `.DS_Store`、`.claude` 及 local 設定暫存），並自動打包產出具備拖拽安裝功能之 `flyflyfly.dmg` 鏡像。

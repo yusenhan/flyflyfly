@@ -118,8 +118,22 @@ graph TD
    git clone https://github.com/flyflyfly/flyflyfly.git
    cd flyflyfly
    ```
-2. **Build and Run**:
-   Double-click to open `flyflyfly.xcodeproj` in Xcode. Select the main Scheme and hit **Run (⌘R)** to compile and launch the app natively under Debug or Release configurations!
+2. **Automated Compilation & Packaging** (Recommended):
+   Run the one-click rebuild script in the project root to automatically build both Debug and Release configurations locally, and package a purified DMG installation disk image:
+   ```bash
+   ./rebuild.sh
+   ```
+   All compiled build files will be neatly output under the root `build/` directory:
+   - `build/debug/flyflyfly.app` - Debug configuration build for active development and inspection.
+   - `build/release/flyflyfly.app` - Highly optimized production Release configuration build.
+   - `build/dmg/flyflyfly.dmg` - Distribution package disc image with drag-and-drop installation support.
+3. **Xcode Manual Development**:
+   Double-click `flyflyfly.xcodeproj` to open the project in Xcode. Select the main Scheme and press **Run (⌘R)** to compile, deploy, and inspect the app natively!
+
+### 🛠️ Build & Commit Guidelines
+To ensure development efficiency and release stability, please follow these guidelines carefully:
+*   **Development Phase**: Build only the **Debug** configuration for testing. Keep Git commits local (no push).
+*   **Release & Submission**: Once features are fully verified, compile both **Release** and **dmg** configurations, write detailed change summaries in Traditional Chinese to `git_change_log.md`, then execute `git push` to upload to the remote repository.
 
 ---
 
