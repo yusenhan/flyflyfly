@@ -149,3 +149,18 @@
     * 在 `start()` 方法中，於 guard 驗證前新增詳細的診斷日誌：`Debug: DVTLocationStream.start - dtxClient存在: \(clientExists), onSendLegacy存在: \(legacyExists), isReady: \(ready)`，並在丟出的異常訊息中附帶詳細的 existence 狀態以方便未來偵錯。
     * 在 `send()` 方法開頭，新增診斷日誌：`Debug: DVTLocationStream.send - legacy存在: \(legacy != nil), client存在: \(client != nil)`。
 * **影響範圍**：從根本上排除了非同步執行緒併發存取 `DVTLocationStream` 狀態時產生的數據競爭 Bug。不論 CPU 核心如何排程，每一次點擊與路徑模擬寫入座標時，`onSendLegacy` 的非空狀態與連線狀態均能 100% 準確同步，解決了「首發成功、次發以後或特定情況下因快取 visibility 誤判為客戶端未建立而失敗」的問題，並在日誌中提供了極其清晰的輔助診斷訊息。
+
+### 15. 優化定點定位地圖點擊體驗：實現地圖點擊即瞬發定位（Tap-to-Go）與極簡按鈕互動流程
+* **變更原因**：
+  * 原先的定點定位（單點定位）模式需要使用者先在地球上點擊選點，隨後在側邊欄手動點擊「選擇定位點」與「開始定位」等多個按鈕才能真正將定位寫入手機。這在實用場景中過於繁複。
+  * 此外，在地圖點擊即瞬發定位實施後，主側邊欄的控制按鈕若顯示「設定定位點」且點擊無效、或與下方「清除定位點」按鈕功能重複，會造成使用者介面上的混淆與冗餘。
+* **具體修改細節**：
+  * **修改檔案**：[AppViewModel.swift](flyflyfly/AppViewModel.swift)
+    * 重構 `handleMapTap(at:)` 方法：針對 `operationMode == .fixedPoint` 分支進行了全面攔截與優化。當點選地圖時，直接跳過原有彈出「確認起點/選擇定位」的草稿臨時狀態，將 `activeOperationMode` 設為 `.fixedPoint`、起點設為點選的座標、並將 `appState` 直接切換為 `.moving`（運行中）。同時瞬時開啟定點定位心跳機制（`startPinnedLocationKeepAlive`）、將座標非同步寫入真實設備（`sendLocationToDeviceAsync`），並自動清理草稿緩衝。
+    * 修改 `shouldUseDraftControls` 與 `shouldShowResetButton` 計算屬性：在定點定位模式下直接回傳 `false`。這樣可以隱藏冗餘的下方「清除定位點」按鈕。
+    * 修改 `buttonTitle` 計算屬性：若尚未點擊地圖定位（處於 `.selectingA` 狀態），按鈕顯示為「請點擊地圖以開始定位」；一旦開始定位（處於 `.moving` 狀態），按鈕顯示為「停止定位」。
+    * 修改 `isMainActionDisabled` 與 `isMainActionDestructive` 計算屬性：使「停止定位」按鈕可點擊並以顯眼的紅色（Destructive）渲染；而在尚未定位時將按鈕設為禁用（Disabled）。
+    * 重構 `handleMainAction()`：當在定點定位模式且處於 `.moving` 狀態下點選主按鈕時，直接呼叫 `resetAll()`，即可優雅地停止心跳並清除真實裝置上的虛擬定位，使手機回歸真實 GPS 位置。
+  * **修改檔案**：[StatusViewSection.swift](flyflyfly/UI/Sidebar/StatusViewSection.swift)
+    * 將原先在定點定位模式下的提示文字「Shift + 點擊設定定位點」更改為「在地圖上任意點擊即可定位」，以符合即點即定位的真實操作方式。
+* **影響範圍**：在「定點定位（單點定位）」模式下，實現了極致絲滑與極簡的互動體驗！使用者只需在 Apple 地圖上任意輕點，新位置便會瞬間反射並生效於真實 iPhone 上；同時，右側邊欄會完美呈現一個大紅色的「停止定位」按鈕，沒有任何多餘、無效或重疊的按鈕，操作效率與介面美學提升數倍！

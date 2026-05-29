@@ -406,11 +406,17 @@ final class AppViewModel: ObservableObject {
     }
 
     var shouldUseDraftControls: Bool {
-        !hasActiveRouteSnapshot || hasDraftEdits
+        if operationMode == .fixedPoint {
+            return false
+        }
+        return !hasActiveRouteSnapshot || hasDraftEdits
     }
 
     var shouldShowResetButton: Bool {
-        hasDraftEdits
+        if operationMode == .fixedPoint {
+            return false
+        }
+        return hasDraftEdits
     }
 
     var resetButtonTitle: String {
@@ -495,8 +501,14 @@ final class AppViewModel: ObservableObject {
         return result
     }
     var buttonTitle: String {
-        if !deviceManager.isConnected && (hasReadyDraft || hasActiveRouteSnapshot) {
+        if !deviceManager.isConnected {
             return "請先連線裝置"
+        }
+        if operationMode == .fixedPoint {
+            if appState == .moving {
+                return "停止定位"
+            }
+            return "請點擊地圖以開始定位"
         }
         if shouldUseDraftControls {
             if hasActiveRouteSnapshot && hasReadyDraft {
@@ -508,6 +520,10 @@ final class AppViewModel: ObservableObject {
     }
 
     var isMainActionDisabled: Bool {
+        if !deviceManager.isConnected { return true }
+        if operationMode == .fixedPoint {
+            return appState != .moving
+        }
         if shouldUseDraftControls {
             return draftActionDisabled
         }
@@ -515,7 +531,10 @@ final class AppViewModel: ObservableObject {
     }
 
     var isMainActionDestructive: Bool {
-        !shouldUseDraftControls && isActiveSimulationRunning
+        if operationMode == .fixedPoint {
+            return appState == .moving
+        }
+        return !shouldUseDraftControls && isActiveSimulationRunning
     }
 
     private var draftButtonTitle: String {
@@ -571,6 +590,13 @@ final class AppViewModel: ObservableObject {
         // Multi-point confirmation logic
         if operationMode == .multiPoint && appState == .selectingA && waypoints.count >= 2 {
             calculateMultiPointRoute()
+            return
+        }
+        
+        if operationMode == .fixedPoint {
+            if appState == .moving {
+                resetAll()
+            }
             return
         }
         
@@ -711,6 +737,27 @@ final class AppViewModel: ObservableObject {
                 centerMap(on: coordinate)
                 return
             }
+        }
+        
+        if operationMode == .fixedPoint {
+            // 定點定位模式：點擊地圖直接開始/更新定位，跳過確認及選點按鈕步驟
+            activeOperationMode = .fixedPoint
+            pointA = coordinate
+            tempCoordinate = nil
+            currentPosition = coordinate
+            appState = .moving
+            
+            // 啟動定點定位心跳/保持連線
+            simulationStore.startPinnedLocationKeepAlive(at: coordinate)
+            
+            // 非同步發送座標到裝置
+            Task {
+                try? await deviceManager.sendLocationToDeviceAsync(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            }
+            
+            centerMap(on: coordinate)
+            resetDraft(clearActive: false)
+            return
         }
         
         switch appState {

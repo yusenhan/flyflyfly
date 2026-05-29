@@ -18,7 +18,7 @@ struct StatusViewSection: View {
                 if vm.operationMode == .multiPoint {
                     Text("Shift + 點擊新增路線點（至少 2 點）").foregroundColor(ModernTheme.accent)
                 } else if vm.operationMode == .fixedPoint {
-                    Text("Shift + 點擊設定定位點").foregroundColor(ModernTheme.accent)
+                    Text("在地圖上任意點擊即可定位").foregroundColor(ModernTheme.accent)
                 } else {
                     Text("Shift + 點擊設定「起點 A」").foregroundColor(ModernTheme.accent)
                 }
