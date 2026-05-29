@@ -4,9 +4,11 @@ import SwiftUI
 // while presenting a clean, focused UI surface.
 struct RouteControlPanel: View {
     @ObservedObject var vm: AppViewModel
+    @ObservedObject var simulationStore: SimulationStore
 
-    init(vm: AppViewModel) {
+    init(vm: AppViewModel, simulationStore: SimulationStore) {
         self.vm = vm
+        self.simulationStore = simulationStore
     }
 
     var body: some View {

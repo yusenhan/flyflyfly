@@ -4,6 +4,7 @@ import MapKit
 @MainActor
 struct FavoritesSectionView: View {
     @ObservedObject var vm: AppViewModel
+    @ObservedObject var favoriteStore: FavoriteStore
     @State private var showingAddAlert = false
     @State private var newName = ""
     @State private var itemToSave: (type: FavoriteType, coords: [CLLocationCoordinate2D])?
@@ -28,7 +29,7 @@ struct FavoritesSectionView: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                if vm.favoriteStore.items.isEmpty {
+                if favoriteStore.items.isEmpty {
                     Text("尚未儲存任何位置或路線")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -36,7 +37,7 @@ struct FavoritesSectionView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
-                            let modeGroups = vm.favoriteStore.groups
+                            let modeGroups = favoriteStore.groups
                             let sortedModes = modeGroups.keys.sorted { $0.rawValue < $1.rawValue }
                             
                             ForEach(sortedModes, id: \.self) { mode in
@@ -202,7 +203,7 @@ struct FavoritesSectionView: View {
             Button("取消", role: .cancel) { }
             Button("更新") {
                 if let item = editingItem {
-                    vm.favoriteStore.update(item, withName: newName.isEmpty ? "未命名" : newName)
+                    favoriteStore.update(item, withName: newName.isEmpty ? "未命名" : newName)
                 }
             }
         }
@@ -256,7 +257,7 @@ struct FavoritesSectionView: View {
                     editingItem = item
                 }
                 Button("刪除", role: .destructive) {
-                    vm.favoriteStore.remove(item)
+                    favoriteStore.remove(item)
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")

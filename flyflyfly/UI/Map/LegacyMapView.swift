@@ -29,6 +29,7 @@ class FlyAnnotation: MKPointAnnotation {
 @MainActor
 struct LegacyMapView: NSViewRepresentable {
     @ObservedObject var vm: AppViewModel
+    @ObservedObject var simulationStore: SimulationStore
     var renderedPurePoints: [VisiblePurePoint] = []
 
     func makeNSView(context: Context) -> MKMapView {
@@ -84,7 +85,7 @@ struct LegacyMapView: NSViewRepresentable {
         let existingPolylines = mapView.overlays.compactMap { $0 as? MKPolyline }
         
         var newPolylines: [MKPolyline] = []
-        if let active = vm.activeRoutePolyline {
+        if let active = simulationStore.activeRoutePolyline {
             newPolylines.append(active)
         }
         
@@ -140,7 +141,7 @@ struct LegacyMapView: NSViewRepresentable {
             newAnnotations.append(createOrUpdateAnnotation(id: id, type: .tempCoordinate, coordinate: temp, title: "確認位置", in: &currentAnnotationsMap))
         }
         
-        if let current = vm.currentPosition {
+        if let current = simulationStore.currentPosition {
             let id = "currentPosition"
             newAnnotations.append(createOrUpdateAnnotation(id: id, type: .currentPosition, coordinate: current, title: "目前位置", in: &currentAnnotationsMap))
         }
@@ -191,7 +192,7 @@ struct LegacyMapView: NSViewRepresentable {
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
                 
-                if polyline === parent.vm.activeRoutePolyline {
+                if polyline === parent.simulationStore.activeRoutePolyline {
                     renderer.strokeColor = NSColor(red: 0.08, green: 0.24, blue: 0.62, alpha: 1.0)
                     renderer.lineWidth = 5
                 } else if parent.vm.appState == .routeSelection {

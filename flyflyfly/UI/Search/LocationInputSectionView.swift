@@ -3,7 +3,6 @@ import MapKit
 
 @MainActor
 struct LocationInputSectionView: View {
-    @ObservedObject var vm: AppViewModel
     @ObservedObject var searchViewModel: SearchViewModel
     let currentRegion: MKCoordinateRegion?
 
@@ -58,7 +57,7 @@ struct LocationInputSectionView: View {
                 .padding(.vertical, 2)
             }
 
-            if let completerError = vm.locationSearchService.completerError {
+            if let completerError = searchViewModel.completerError {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("搜尋錯誤").font(.caption).fontWeight(.bold).foregroundColor(.red)
@@ -84,7 +83,7 @@ struct LocationInputSectionView: View {
             }
 
             // Integrated Search Results & Suggestions
-            let completions = vm.locationSearchService.completions
+            let completions = searchViewModel.completions
             let results = searchViewModel.placeResults
 
             if !completions.isEmpty || !results.isEmpty {

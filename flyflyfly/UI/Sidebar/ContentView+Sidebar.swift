@@ -33,7 +33,7 @@ extension ContentView {
 
     @ViewBuilder
     var locationInputSection: some View {
-        LocationInputSectionView(vm: vm, searchViewModel: vm.searchViewModel, currentRegion: vm.visibleMapRegion)
+        LocationInputSectionView(searchViewModel: vm.searchViewModel, currentRegion: vm.visibleMapRegion)
     }
 
     var wirelessModeBinding: Binding<Bool> {
@@ -136,10 +136,6 @@ extension ContentView {
         vm.switchModePreservingPinnedLocation()
     }
 
-    func handlePlaceKeywordChange(_ newValue: String) {
-        vm.locationSearchService.updateQuery(newValue, region: vm.mapRegion)
-    }
-
     func clampSpeedIfNeeded(_ newValue: Double) {
         let clamped = min(max(newValue, AppConstants.Simulation.speedStep), vm.maximumSpeed)
         if abs(clamped - newValue) > 0.0001 {
@@ -236,7 +232,7 @@ extension ContentView {
                                 .font(.subheadline.bold())
                                 .foregroundColor(ModernTheme.label)
                             
-                            FavoritesSectionView(vm: vm)
+                            FavoritesSectionView(vm: vm, favoriteStore: vm.favoriteStore)
                         }
                         .transition(.opacity)
 
@@ -256,7 +252,7 @@ extension ContentView {
                                 .font(.subheadline.bold())
                                 .foregroundColor(ModernTheme.label)
                             
-                            MovementSettingsSectionView(vm: vm)
+                            MovementSettingsSectionView(vm: vm, simulationStore: vm.simulationStore)
                         }
                         .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .trailing)), removal: .opacity))
                     }
@@ -272,7 +268,7 @@ extension ContentView {
                 
                 // 當正在模擬運行或處於與移動相關狀態時，動態展開顯示狀態通知
                 if vm.isActiveSimulationRunning || vm.appState == .moving || vm.appState == .calculatingRoute || vm.appState == .routeSelection {
-                    StatusViewSection(vm: vm, routeColors: routeColors)
+                    StatusViewSection(vm: vm, simulationStore: vm.simulationStore, routeColors: routeColors)
                         .padding(.top, 4)
                         .padding(.horizontal, 4)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -301,19 +297,21 @@ extension ContentView {
 
     @ViewBuilder
     func purePointControlsSection(isCompactSidebar: Bool) -> some View {
-        PurePointControlsSectionView(
-            overlayCount: purePointOverlays.count,
-            importError: purePointImportError,
-            renderNotice: purePointRenderNotice,
-            hasVisiblePoints: !vm.purePointStore.renderedPurePoints.isEmpty,
-            onImport: {
-                purePointImportError = nil
-                isImportingPurePointKML = true
-            },
-            onFocusAll: focusAllPurePoints
-        ) {
-            ForEach(purePointOverlays) { overlay in
-                purePointOverlaySection(overlay, isCompactSidebar: isCompactSidebar)
+        PurePointStoreReader(store: vm.purePointStore) { renderState in
+            PurePointControlsSectionView(
+                overlayCount: purePointOverlays.count,
+                importError: purePointImportError,
+                renderNotice: purePointRenderNotice(for: renderState),
+                hasVisiblePoints: !renderState.points.isEmpty,
+                onImport: {
+                    purePointImportError = nil
+                    isImportingPurePointKML = true
+                },
+                onFocusAll: focusAllPurePoints
+            ) {
+                ForEach(purePointOverlays) { overlay in
+                    purePointOverlaySection(overlay, isCompactSidebar: isCompactSidebar)
+                }
             }
         }
     }

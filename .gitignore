@@ -4,6 +4,9 @@ build/
 DerivedData/
 *.hmap
 *.ipa
+*.dmg
+*.profraw
+*.xcresult
 *.xcuserstate
 project.xcworkspace/xcuserdata/
 project.xcworkspace/xcshareddata/swiftpm/configuration/control-cache

@@ -3,12 +3,13 @@ import MapKit
 
 struct StatusViewSection: View {
     @ObservedObject var vm: AppViewModel
+    @ObservedObject var simulationStore: SimulationStore
     let routeColors: [Color]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if vm.hasActiveRouteSnapshot {
-                Text(vm.isActiveSimulationRunning ? "藍線路線同步中" : "藍線路線已固定")
+                Text(simulationStore.isActiveSimulationRunning ? "藍線路線同步中" : "藍線路線已固定")
                     .foregroundColor(ModernTheme.info)
             }
 
@@ -46,7 +47,7 @@ struct StatusViewSection: View {
                 Text(vm.hasActiveRouteSnapshot ? "黃色草稿已完成，可開始新路線" : "準備就緒")
                     .foregroundColor(vm.hasActiveRouteSnapshot ? .yellow : ModernTheme.info)
             case .moving:
-                if vm.isTrafficLightEnabled && vm.isWaitingForTrafficLight {
+                if simulationStore.isTrafficLightEnabled && simulationStore.isWaitingForTrafficLight {
                     HStack(spacing: 10) {
                         Image(systemName: "traffic.light.fill")
                             .font(.title3)
@@ -56,7 +57,7 @@ struct StatusViewSection: View {
                             Text("紅綠燈停等中 (防作弊)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            Text("剩餘時間: \(vm.trafficLightRemainingSeconds) 秒")
+                            Text("剩餘時間: \(simulationStore.trafficLightRemainingSeconds) 秒")
                                 .font(.subheadline)
                                 .fontWeight(.bold)
                                 .foregroundColor(.red)

@@ -13,6 +13,7 @@ final class SearchViewModel: ObservableObject {
     @Published var isSearching: Bool = false
     @Published var detectedClipboardCoordinate: String? = nil
     private var cancellables: Set<AnyCancellable> = []
+    private var searchTask: Task<Void, Never>?
     
     var placeKeyword: String {
         get { mapStateStore.placeKeyword }
@@ -34,6 +35,14 @@ final class SearchViewModel: ObservableObject {
         set { mapStateStore.locationInputError = newValue }
     }
 
+    var completions: [MKLocalSearchCompletion] {
+        locationSearchService.completions
+    }
+
+    var completerError: String? {
+        locationSearchService.completerError
+    }
+
     init(mapStateStore: MapStateStore, locationSearchService: any LocationSearching) {
         self.mapStateStore = mapStateStore
         self.locationSearchService = locationSearchService
@@ -46,6 +55,13 @@ final class SearchViewModel: ObservableObject {
     }
     
     private func setupSearchDebounce() {
+        locationSearchService.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
         mapStateStore.$placeKeyword
             .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
             .removeDuplicates()
@@ -53,6 +69,7 @@ final class SearchViewModel: ObservableObject {
                 guard let self = self else { return }
                 guard !keyword.isEmpty else {
                     self.placeResults = []
+                    self.locationSearchService.clearSuggestions()
                     return
                 }
                 
@@ -60,7 +77,9 @@ final class SearchViewModel: ObservableObject {
                 if self.isCoordinateFormat(keyword) {
                     self.parseCoordinateInput(keyword)
                     self.placeResults = []
+                    self.locationSearchService.clearSuggestions()
                 } else {
+                    self.locationSearchService.updateQuery(keyword, region: self.mapStateStore.visibleMapRegion)
                     self.searchPlaces(currentRegion: self.mapStateStore.visibleMapRegion)
                 }
             }
@@ -69,11 +88,7 @@ final class SearchViewModel: ObservableObject {
 
     // 輔助方法：判定是否為合法的經緯度格式
     func isCoordinateFormat(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let pattern = #"^(?i)(-?\d{1,3}(?:\.\d+)?)\s*[,，\s]\s*(-?\d{1,3}(?:\.\d+)?)$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
-        let range = NSRange(trimmed.startIndex..., in: trimmed)
-        return regex.firstMatch(in: trimmed, range: range) != nil
+        CoordinateParser.isCoordinateLike(text)
     }
 
     // 檢查 macOS 剪貼簿是否含有座標
@@ -84,10 +99,7 @@ final class SearchViewModel: ObservableObject {
             return
         }
         
-        // 使用正則匹配經緯度
-        let pattern = #"^(?i)(-?\d{1,3}(?:\.\d+)?)\s*[,，\s]\s*(-?\d{1,3}(?:\.\d+)?)$"#
-        if let regex = try? NSRegularExpression(pattern: pattern),
-           let _ = regex.firstMatch(in: clipboardString, range: NSRange(clipboardString.startIndex..., in: clipboardString)) {
+        if CoordinateParser.isCoordinateLike(clipboardString) {
             // 這是一個合法的經緯度格式，且它不等於我們目前的搜尋關鍵字，避免重複提示
             if clipboardString != placeKeyword {
                 self.detectedClipboardCoordinate = clipboardString
@@ -102,22 +114,11 @@ final class SearchViewModel: ObservableObject {
     // 從剪貼簿載入並定位座標
     func loadFromClipboard() {
         guard let clip = detectedClipboardCoordinate else { return }
-        let pattern = #"^(?i)(-?\d{1,3}(?:\.\d+)?)\s*[,，\s]\s*(-?\d{1,3}(?:\.\d+)?)$"#
-        if let regex = try? NSRegularExpression(pattern: pattern),
-           let match = regex.firstMatch(in: clip, range: NSRange(clip.startIndex..., in: clip)) {
-            
-            let latStr = (clip as NSString).substring(with: match.range(at: 1))
-            let lonStr = (clip as NSString).substring(with: match.range(at: 2))
-            
-            if let lat = Double(latStr), let lon = Double(lonStr) {
-                let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                if CLLocationCoordinate2DIsValid(coord) {
-                    insertPoint(coord)
-                    // 將 placeKeyword 設為座標以回饋用戶
-                    placeKeyword = clip
-                    detectedClipboardCoordinate = nil
-                }
-            }
+        if let coordinate = CoordinateParser.parse(clip) {
+            insertPoint(coordinate)
+            // 將 placeKeyword 設為座標以回饋用戶
+            placeKeyword = clip
+            detectedClipboardCoordinate = nil
         }
     }
 
@@ -132,37 +133,41 @@ final class SearchViewModel: ObservableObject {
             return
         }
         
-        isSearching = true
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = keyword
-        if let region = currentRegion {
-            request.region = region
-        }
-        
-        let search = MKLocalSearch(request: request)
-        search.start { [weak self] response, error in
-            Task { @MainActor in
-                guard let self = self else { return }
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            guard let self = self else { return }
+            self.isSearching = true
+            do {
+                let items = try await self.locationSearchService.search(for: keyword, region: currentRegion)
+                guard !Task.isCancelled else { return }
                 self.isSearching = false
-                if let items = response?.mapItems {
-                    self.placeResults = items
-                }
+                self.placeResults = items
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.isSearching = false
+                self.placeResults = []
             }
         }
     }
 
     func selectCompletion(_ completion: MKLocalSearchCompletion) {
-        isSearching = true
-        let request = MKLocalSearch.Request(completion: completion)
-        let search = MKLocalSearch(request: request)
-        
-        search.start { [weak self] response, error in
-            Task { @MainActor in
-                guard let self = self else { return }
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            guard let self = self else { return }
+            self.isSearching = true
+            do {
+                let items = try await self.locationSearchService.search(
+                    for: completion,
+                    region: self.mapStateStore.visibleMapRegion
+                )
+                guard !Task.isCancelled else { return }
                 self.isSearching = false
-                if let item = response?.mapItems.first {
+                if let item = items.first {
                     self.selectSearchItem(item)
                 }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.isSearching = false
             }
         }
     }
@@ -210,21 +215,10 @@ final class SearchViewModel: ObservableObject {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
-        let pattern = #"^(?i)(-?\d{1,3}(?:\.\d+)?)\s*[,，\s]\s*(-?\d{1,3}(?:\.\d+)?)$"#
-        if let regex = try? NSRegularExpression(pattern: pattern),
-           let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)) {
-            
-            let latStr = (trimmed as NSString).substring(with: match.range(at: 1))
-            let lonStr = (trimmed as NSString).substring(with: match.range(at: 2))
-            
-            if let lat = Double(latStr), let lon = Double(lonStr) {
-                let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                if CLLocationCoordinate2DIsValid(coord) {
-                    insertPoint(coord)
-                    locationInputError = nil
-                    return
-                }
-            }
+        if let coordinate = CoordinateParser.parse(trimmed) {
+            insertPoint(coordinate)
+            locationInputError = nil
+            return
         }
         
         locationInputError = "無法辨識座標。格式參考：25.033, 121.565"

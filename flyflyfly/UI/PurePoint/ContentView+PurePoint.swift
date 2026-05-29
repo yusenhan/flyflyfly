@@ -1,6 +1,34 @@
 import SwiftUI
 import MapKit
 
+struct PurePointStoreReader<Content: View>: View {
+    @ObservedObject var store: PurePointStore
+    let content: (PurePointRenderState) -> Content
+
+    init(store: PurePointStore, @ViewBuilder content: @escaping (PurePointRenderState) -> Content) {
+        self.store = store
+        self.content = content
+    }
+
+    var body: some View {
+        content(store.renderState)
+    }
+}
+
+struct SimulationStoreReader<Content: View>: View {
+    @ObservedObject var store: SimulationStore
+    let content: (SimulationStore) -> Content
+
+    init(store: SimulationStore, @ViewBuilder content: @escaping (SimulationStore) -> Content) {
+        self.store = store
+        self.content = content
+    }
+
+    var body: some View {
+        content(store)
+    }
+}
+
 extension ContentView {
     static func makeOverlayStates(for overlays: [PurePointOverlay]) -> [String: PurePointOverlayUIState] {
         Dictionary(uniqueKeysWithValues: overlays.map { overlay in

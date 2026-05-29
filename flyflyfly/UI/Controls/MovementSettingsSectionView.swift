@@ -4,6 +4,7 @@ import MapKit
 @MainActor
 struct MovementSettingsSectionView: View {
     @ObservedObject var vm: AppViewModel
+    @ObservedObject var simulationStore: SimulationStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,8 +28,8 @@ struct MovementSettingsSectionView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
-                    Text("當前速度: \(String(format: "%.1f", vm.speed)) km/h")
-                    if !vm.routes.isEmpty || vm.totalRouteDistance > 0 {
+                    Text("當前速度: \(String(format: "%.1f", simulationStore.speed)) km/h")
+                    if !vm.routes.isEmpty || simulationStore.totalRouteDistance > 0 {
                         HStack(spacing: 4) {
                             Text("單趟: \(vm.estimatedTime)")
                             if let progress = vm.progressPercentage {
@@ -116,7 +117,7 @@ struct MovementSettingsSectionView: View {
             .padding(10)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
             .cornerRadius(8)
-            .animation(.spring(), value: vm.isJitterEnabled)
+            .animation(.spring(), value: simulationStore.isJitterEnabled)
 
         }
     }

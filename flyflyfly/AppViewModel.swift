@@ -219,22 +219,6 @@ final class AppViewModel: ObservableObject {
         set { mapStateStore.requestCameraPosition = newValue }
     }
 
-    // MARK: - Pure Point (Delegated)
-    var availableOverlays: [PurePointOverlay] {
-        get { purePointStore.availableOverlays }
-        set { purePointStore.availableOverlays = newValue }
-    }
-    var selectedOverlayIDs: Set<String> {
-        get { purePointStore.selectedOverlayIDs }
-        set { purePointStore.selectedOverlayIDs = newValue }
-    }
-    var renderedPurePoints: [VisiblePurePoint] {
-        get { purePointStore.renderedPurePoints }
-        set { purePointStore.renderedPurePoints = newValue }
-    }
-    var isPurePointLoading: Bool { purePointStore.isLoading }
-    var purePointRenderState: PurePointRenderState { purePointStore.renderState }
-
     // MARK: - Private state
     private var cancellables: Set<AnyCancellable> = []
     private var stateBeforeConfirm: AppState = .selectingA
@@ -306,10 +290,6 @@ final class AppViewModel: ObservableObject {
         deviceStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         simulationStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         mapStateStore.objectWillChange.throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        purePointStore.objectWillChange.throttle(for: .milliseconds(500), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        favoriteStore.objectWillChange.debounce(for: .milliseconds(100), scheduler: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        searchViewModel.objectWillChange.debounce(for: .milliseconds(100), scheduler: RunLoop.main).sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
-        
         setupDeviceObservers()
         
         // Pre-warm in background task to check device availability
@@ -1085,11 +1065,6 @@ final class AppViewModel: ObservableObject {
         let lonSpan = min(mapRegion.span.longitudeDelta, AppConstants.Map.defaultSpanDelta)
         mapRegion = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: latSpan, longitudeDelta: lonSpan))
     }
-
-    // MARK: - Pure Point Logic
-    func toggleOverlay(_ id: String) { purePointStore.toggleOverlay(id) }
-    func addImportedOverlays(_ overlays: [PurePointOverlay]) { purePointStore.addImportedOverlays(overlays) }
-    func removeOverlay(_ overlay: PurePointOverlay) { purePointStore.removeOverlay(overlay) }
 
     // MARK: - Compatibility / Lifecycle
     

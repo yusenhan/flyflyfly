@@ -5,34 +5,62 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_NAME="flyflyfly"
 PROJECT_PATH="${ROOT_DIR}/${APP_NAME}.xcodeproj"
+MODE="${1:-all}"
 
-# 1. 建置 Debug 版本
-echo "[INFO] 正在建置 ${APP_NAME} (Debug)..."
-DEBUG_BUILD_ROOT="${ROOT_DIR}/build/debug_build"
-DEBUG_DERIVED_DIR="${DEBUG_BUILD_ROOT}/DerivedData"
-DEBUG_APP_PATH="${DEBUG_DERIVED_DIR}/Build/Products/Debug/${APP_NAME}.app"
+usage() {
+  echo "Usage: $0 [debug|release|dmg|all]"
+}
 
-rm -rf "${DEBUG_BUILD_ROOT}"
-mkdir -p "${DEBUG_BUILD_ROOT}"
+build_configuration() {
+  local configuration="$1"
+  local output_dir="$2"
+  local build_root="${ROOT_DIR}/build/${output_dir}_build"
+  local derived_dir="${build_root}/DerivedData"
+  local app_path="${derived_dir}/Build/Products/${configuration}/${APP_NAME}.app"
 
-xcodebuild \
-  -project "${PROJECT_PATH}" \
-  -scheme "${APP_NAME}" \
-  -configuration Debug \
-  -derivedDataPath "${DEBUG_DERIVED_DIR}" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY="" \
-  build
+  echo "[INFO] 正在建置 ${APP_NAME} (${configuration})..."
+  rm -rf "${build_root}"
+  mkdir -p "${build_root}"
 
-echo "[INFO] 正在複製 Debug app bundle 至 build/debug..."
-mkdir -p "${ROOT_DIR}/build/debug"
-rm -rf "${ROOT_DIR}/build/debug/${APP_NAME}.app"
-cp -R "${DEBUG_APP_PATH}" "${ROOT_DIR}/build/debug/${APP_NAME}.app"
-rm -rf "${DEBUG_BUILD_ROOT}"
+  xcodebuild \
+    -project "${PROJECT_PATH}" \
+    -scheme "${APP_NAME}" \
+    -configuration "${configuration}" \
+    -derivedDataPath "${derived_dir}" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    build
 
-# 2. 建置 Release 版本與 DMG 套件
-echo "[INFO] 正在調用 build-dmg.sh 進行 Release 與 DMG 建置..."
-"${SCRIPT_DIR}/build-dmg.sh"
+  echo "[INFO] 正在複製 ${configuration} app bundle 至 build/${output_dir}..."
+  mkdir -p "${ROOT_DIR}/build/${output_dir}"
+  rm -rf "${ROOT_DIR}/build/${output_dir}/${APP_NAME}.app"
+  cp -R "${app_path}" "${ROOT_DIR}/build/${output_dir}/${APP_NAME}.app"
+  rm -rf "${build_root}"
+}
 
-echo "[INFO] 所有建置皆已成功完成！"
+case "${MODE}" in
+  debug)
+    build_configuration Debug debug
+    ;;
+  release)
+    build_configuration Release release
+    ;;
+  dmg)
+    "${SCRIPT_DIR}/build-dmg.sh"
+    ;;
+  all)
+    build_configuration Debug debug
+    "${SCRIPT_DIR}/build-dmg.sh"
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage
+    exit 64
+    ;;
+esac
+
+echo "[INFO] 建置流程完成：${MODE}"

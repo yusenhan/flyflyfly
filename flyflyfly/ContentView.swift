@@ -66,16 +66,7 @@ struct ContentView: View {
         _vm = StateObject(wrappedValue: initialVM)
     }
 
-    private var purePointRenderState: PurePointRenderState {
-        vm.purePointStore.renderState
-    }
-
-    private var renderedPurePoints: [VisiblePurePoint] {
-        purePointRenderState.points
-    }
-
-    var purePointRenderNotice: String? {
-        let state = purePointRenderState
+    func purePointRenderNotice(for state: PurePointRenderState) -> String? {
         guard state.totalMatchingCount > 0 else { return nil }
 
         if state.isDensityLimited {
@@ -96,9 +87,6 @@ struct ContentView: View {
         }
         .onChange(of: vm.operationMode) { _ in
             handleOperationModeChange()
-        }
-        .onChange(of: vm.searchViewModel.placeKeyword) { newValue in
-            handlePlaceKeywordChange(newValue)
         }
         .onChange(of: vm.speed) { newValue in
             clampSpeedIfNeeded(newValue)
@@ -135,51 +123,55 @@ struct ContentView: View {
     var mapPane: some View {
         GeometryReader { geometry in
             if geometry.size.width > 20, geometry.size.height > 20 {
-                ZStack(alignment: .top) {
-                    ZStack(alignment: .bottomTrailing) {
-                        ZStack(alignment: .topTrailing) {
-                            LegacyMapView(vm: vm, renderedPurePoints: renderedPurePoints)
-                                .ignoresSafeArea()
-                            
-                            // Map Style Picker
-                            Picker("", selection: Binding(
-                                get: { vm.mapType },
-                                set: { vm.mapType = $0 }
-                            )) {
-                                Text("標準").tag(MKMapType.standard)
-                                Text("衛星").tag(MKMapType.satellite)
-                                Text("混合").tag(MKMapType.hybrid)
+                PurePointStoreReader(store: vm.purePointStore) { renderState in
+                    SimulationStoreReader(store: vm.simulationStore) { simulationStore in
+                        ZStack(alignment: .top) {
+                            ZStack(alignment: .bottomTrailing) {
+                                ZStack(alignment: .topTrailing) {
+                                    LegacyMapView(vm: vm, simulationStore: simulationStore, renderedPurePoints: renderState.points)
+                                        .ignoresSafeArea()
+                                    
+                                    // Map Style Picker
+                                    Picker("", selection: Binding(
+                                        get: { vm.mapType },
+                                        set: { vm.mapType = $0 }
+                                    )) {
+                                        Text("標準").tag(MKMapType.standard)
+                                        Text("衛星").tag(MKMapType.satellite)
+                                        Text("混合").tag(MKMapType.hybrid)
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .frame(width: 140)
+                                    .padding(6)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(8)
+                                    .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1.5)
+                                    .padding(12)
+                                }
+                                
+                                // Floating Joystick Panel (bottom-right)
+                                joystickPanel(simulationStore: simulationStore)
                             }
-                            .pickerStyle(.segmented)
-                            .frame(width: 140)
-                            .padding(6)
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(8)
-                            .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1.5)
-                            .padding(12)
+                            
+                            // Floating PurePoint HUD Bubble (top center)
+                            if let notice = purePointRenderNotice(for: renderState) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "info.circle.fill")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.orange)
+                                    Text(notice)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(.primary)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(16)
+                                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
+                                .padding(.top, 12)
+                            }
                         }
-                        
-                        // Floating Joystick Panel (bottom-right)
-                        joystickPanel
-                    }
-                    
-                    // Floating PurePoint HUD Bubble (top center)
-                    if let notice = purePointRenderNotice {
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle.fill")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.orange)
-                            Text(notice)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.primary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
-                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
-                        .padding(.top, 12)
                     }
                 }
             } else {
@@ -189,8 +181,8 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var joystickPanel: some View {
-        let hasActiveCoordinate = vm.tempCoordinate != nil || (vm.appState == .moving && vm.currentPosition != nil) || (vm.pointA != nil && (vm.appState == .selectingA || vm.appState == .readyToMove)) || (vm.pointB != nil && vm.appState == .selectingB)
+    private func joystickPanel(simulationStore: SimulationStore) -> some View {
+        let hasActiveCoordinate = vm.tempCoordinate != nil || (vm.appState == .moving && simulationStore.currentPosition != nil) || (vm.pointA != nil && (vm.appState == .selectingA || vm.appState == .readyToMove)) || (vm.pointB != nil && vm.appState == .selectingB)
         
         if hasActiveCoordinate {
             VStack(spacing: 8) {
@@ -305,4 +297,3 @@ public enum WorkflowTab: String, CaseIterable, Identifiable {
         }
     }
 }
-

@@ -7,7 +7,7 @@ struct SidebarFooterView: View {
     var body: some View {
         VStack(spacing: 8) {
             Divider()
-            RouteControlPanel(vm: vm)
+            RouteControlPanel(vm: vm, simulationStore: vm.simulationStore)
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
 

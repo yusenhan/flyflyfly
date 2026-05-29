@@ -1,6 +1,6 @@
-import Foundation
-@preconcurrency import Foundation
+import Combine
 import CoreLocation
+import Foundation
 
 enum FavoriteType: String, Codable {
     case point = "定點"
@@ -123,7 +123,9 @@ final class FavoriteStore: ObservableObject {
     }
     
     func remove(at offsets: IndexSet) {
-        items.remove(atOffsets: offsets)
+        for offset in offsets.sorted(by: >) where items.indices.contains(offset) {
+            items.remove(at: offset)
+        }
         save()
     }
     

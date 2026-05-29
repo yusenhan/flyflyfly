@@ -37,9 +37,10 @@
 		3AB9FEDDE18AD3199309B1C8 /* LocationSearching.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E81028FE82123F3AD6C98D /* LocationSearching.swift */; };
 		B62666C183563EE6180BF477 /* DVTStreaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0835763CC40630B9C8E7DFF5 /* DVTStreaming.swift */; };
 		697B050651F44B4ECD027DF3 /* DiagnosticsProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA481DC5EB7115A38F23FB09 /* DiagnosticsProviding.swift */; };
-		C9923D9470C2D92D25EFFF9B /* DeviceControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44ECA2EC91A3D491059182D /* DeviceControlling.swift */; };
-		9BC551718C89254AF34CFB38 /* LocationSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1484DB0FB9D78EE69DA7E87 /* LocationSearchService.swift */; };
-		A2912A638515ED22705B5EA1 /* PurePointRenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BA7878CD6FF424EFC89AAC /* PurePointRenderEngine.swift */; };
+			C9923D9470C2D92D25EFFF9B /* DeviceControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44ECA2EC91A3D491059182D /* DeviceControlling.swift */; };
+			9BC551718C89254AF34CFB38 /* LocationSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1484DB0FB9D78EE69DA7E87 /* LocationSearchService.swift */; };
+			F0C0A0022F80000100000001 /* CoordinateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C0A0012F80000100000001 /* CoordinateParser.swift */; };
+			A2912A638515ED22705B5EA1 /* PurePointRenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BA7878CD6FF424EFC89AAC /* PurePointRenderEngine.swift */; };
 		26DAA246430CC9C1EE5B0ACC /* PurePointOverlaySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82DA9FD44F6BDFAB975610C /* PurePointOverlaySupport.swift */; };
 		45807405A1D554C7102CC6D0 /* AppDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA22E96607C9419F28006811 /* AppDiagnostics.swift */; };
 		C2D02F575BC2F854C0BA8F76 /* DVTLocationStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = F07FBD9B323D571FD2A548C9 /* DVTLocationStream.swift */; };
@@ -118,9 +119,10 @@
 		60E81028FE82123F3AD6C98D /* LocationSearching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocationSearching.swift"; sourceTree = "<group>"; };
 		0835763CC40630B9C8E7DFF5 /* DVTStreaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DVTStreaming.swift"; sourceTree = "<group>"; };
 		AA481DC5EB7115A38F23FB09 /* DiagnosticsProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticsProviding.swift"; sourceTree = "<group>"; };
-		C44ECA2EC91A3D491059182D /* DeviceControlling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceControlling.swift"; sourceTree = "<group>"; };
-		C1484DB0FB9D78EE69DA7E87 /* LocationSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocationSearchService.swift"; sourceTree = "<group>"; };
-		F0BA7878CD6FF424EFC89AAC /* PurePointRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PurePointRenderEngine.swift"; sourceTree = "<group>"; };
+			C44ECA2EC91A3D491059182D /* DeviceControlling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceControlling.swift"; sourceTree = "<group>"; };
+			C1484DB0FB9D78EE69DA7E87 /* LocationSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocationSearchService.swift"; sourceTree = "<group>"; };
+			F0C0A0012F80000100000001 /* CoordinateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CoordinateParser.swift"; sourceTree = "<group>"; };
+			F0BA7878CD6FF424EFC89AAC /* PurePointRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PurePointRenderEngine.swift"; sourceTree = "<group>"; };
 		A82DA9FD44F6BDFAB975610C /* PurePointOverlaySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PurePointOverlaySupport.swift"; sourceTree = "<group>"; };
 		BA22E96607C9419F28006811 /* AppDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDiagnostics.swift"; sourceTree = "<group>"; };
 		F07FBD9B323D571FD2A548C9 /* DVTLocationStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DVTLocationStream.swift"; sourceTree = "<group>"; };
@@ -353,13 +355,14 @@
 			);
 			path = "Services"; sourceTree = "<group>";
 		};
-		5DF9F2F21518769D7356ECAE /* Location */ = {
-			isa = PBXGroup;
-			children = (
-				C1484DB0FB9D78EE69DA7E87,
-			);
-			path = "Location"; sourceTree = "<group>";
-		};
+			5DF9F2F21518769D7356ECAE /* Location */ = {
+				isa = PBXGroup;
+				children = (
+					C1484DB0FB9D78EE69DA7E87,
+					F0C0A0012F80000100000001,
+				);
+				path = "Location"; sourceTree = "<group>";
+			};
 		663320FBFA635C640D891FF5 /* PurePoint */ = {
 			isa = PBXGroup;
 			children = (
@@ -626,10 +629,11 @@
 				40E8C23F7C44DB389EC3F02B,
 				3AB9FEDDE18AD3199309B1C8,
 				B62666C183563EE6180BF477,
-				697B050651F44B4ECD027DF3,
-				C9923D9470C2D92D25EFFF9B,
-				9BC551718C89254AF34CFB38,
-				A2912A638515ED22705B5EA1,
+					697B050651F44B4ECD027DF3,
+					C9923D9470C2D92D25EFFF9B,
+					9BC551718C89254AF34CFB38,
+					F0C0A0022F80000100000001,
+					A2912A638515ED22705B5EA1,
 				26DAA246430CC9C1EE5B0ACC,
 				45807405A1D554C7102CC6D0,
 				C2D02F575BC2F854C0BA8F76,
