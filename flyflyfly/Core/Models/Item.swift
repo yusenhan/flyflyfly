@@ -1,9 +1,6 @@
 //
 //  Item.swift
 //  flyflyfly
-//
-//  Created by Hanson Han on 3/2/26.
-//
 
 import Foundation
 

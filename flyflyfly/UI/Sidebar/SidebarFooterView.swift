@@ -39,7 +39,7 @@ struct SidebarFooterView: View {
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
-                    Text("app created by Hanson Han")
+                    Text("local GPS simulation utility")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
