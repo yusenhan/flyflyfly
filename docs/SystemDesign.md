@@ -52,6 +52,6 @@ flyflyfly 目前採用 **Swift 原生 DTX/USBMux 通訊核心**，定位注入�
 ---
 
 ## 5. 編譯與分發
-*   **一鍵自動化建置**：專案根目錄提供了一鍵自動化建置腳本 `./rebuild.sh`，會自動授權並調用 `scripts/build.sh all`。
-*   **Debug & Release 雙重編譯**：`scripts/build.sh all` 會先建置 Debug，再建置 Release，最後交由 `scripts/build-dmg.sh` 封裝 DMG；`scripts/build-dmg.sh` 會優先重用 `build/release/flyflyfly.app`，必要時才自行補建 Release。所有產物統一管理於專案根目錄的 `build/` 資料夾中（分別為 `build/debug/`、`build/release/` 與 `build/dmg/`）。
+*   **一鍵自動化建置**：專案根目錄提供單一建置腳本 `./rebuild.sh`，可執行完整 `all` 流程，也支援 `debug`、`release` 與 `dmg` 子命令。
+*   **Debug & Release 雙重編譯**：`./rebuild.sh` 預設會先建置 Debug，再建置 Release，最後封裝 DMG；`./rebuild.sh dmg` 會優先重用 `build/release/flyflyfly.app`，必要時才自行補建 Release。所有產物統一管理於專案根目錄的 `build/` 資料夾中（分別為 `build/debug/`、`build/release/` 與 `build/dmg/`）。
 *   **DMG 封裝與淨化**：建置指令會自動對產出的 `.app` 套件進行發布前的淨化（清除 `.DS_Store`、`.claude` 及 local 設定暫存），並自動打包產出具備拖拽安裝功能之 `flyflyfly.dmg` 鏡像。

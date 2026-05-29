@@ -115,7 +115,7 @@ graph TD
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/flyflyfly/flyflyfly.git
+   git clone https://github.com/yusenhan/flyflyfly.git
    cd flyflyfly
    ```
 2. **Automated Compilation & Packaging** (Recommended):
@@ -134,7 +134,7 @@ graph TD
 
 ### 🛠️ Build & Commit Guidelines
 To ensure development efficiency and release stability, please follow these guidelines carefully:
-*   **Development Phase**: Build **Debug** during day-to-day testing, and run `./rebuild.sh` before integration or submission to verify **Debug + Release + dmg** together.
+*   **Development Phase**: Use `./rebuild.sh debug` for day-to-day **Debug** builds, and run `./rebuild.sh` before integration or submission to verify **Debug + Release + dmg** together.
 *   **Release & Submission**: Once features are fully verified, write detailed change summaries in Traditional Chinese to `git_change_log.md` and keep the changes local for the next submission step.
 
 ---

@@ -67,5 +67,5 @@ Are you 100% confident in this strategy? If not, find all possible loopholes, su
 
 ## 5. 項目特定準則
 
-- **建置與執行規範**: 所有建置產出的檔案（包含 Debug、Release 以及 DMG）皆必須存放於專案根目錄的 `build` 目錄下（分別為 `build/debug`、`build/release` 與 `build/dmg`）。`runfly.sh` 應被修改為直接執行 `build/release/flyflyfly.app`。此外，所有的建置必須同時編譯 Debug 與 Release 兩個版本，以確保在兩種配置與環境下代碼均能正常編譯無誤。
+- **建置與執行規範**: 所有建置產出的檔案（包含 Debug、Release 以及 DMG）皆必須存放於專案根目錄的 `build` 目錄下（分別為 `build/debug`、`build/release` 與 `build/dmg`）。`rebuild.sh` 是唯一建置入口，支援 `debug`、`release`、`dmg` 與預設 `all`；`runfly.sh` 只負責執行 `build/release/flyflyfly.app`，不得加入建置或測試責任。
 - **Git & GitHub 變更管理**: 目前所有的變更暫不推送（Push/Sync）至 GitHub。每次進行代碼、配置或準則變更時，皆必須在專案根目錄的 `git_change_log.md` 中以繁體中文詳細記錄變更內容（包括變更原因、具體修改細節與影響），以備日後提交 Git Commit 使用。

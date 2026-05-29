@@ -6,6 +6,23 @@
 
 ## 變更紀錄 [2026-05-29]
 
+### 18. 整合建置入口並收斂 runfly 職責
+* **變更原因**：
+  * 原本建置流程分散在 `rebuild.sh`、`scripts/build.sh` 與 `scripts/build-dmg.sh`，而 `runfly.sh` 同時保留建置、測試與啟動職責，容易造成使用者誤以為 `runfly.sh` 會建置最新 App。
+  * 目前需求是建置入口只保留一個，`runfly.sh` 僅負責執行已建置的 App。
+* **具體修改細節**：
+  * **修改檔案**：[rebuild.sh](rebuild.sh)
+    * 將 Debug、Release 與 DMG 打包邏輯整合進根目錄單一腳本。
+    * 支援 `all`、`debug`、`release`、`dmg` 與 `help` 子命令；預設 `all` 會完整產出 `build/debug`、`build/release` 與 `build/dmg/flyflyfly.dmg`。
+  * **修改檔案**：[runfly.sh](runfly.sh)
+    * 移除 build、build-release、test、xcode-test 等非啟動職責。
+    * 僅保留 `run` / `release` / `help`，固定開啟 `build/release/flyflyfly.app`。
+  * **刪除檔案**：[scripts/build.sh](scripts/build.sh)、[scripts/build-dmg.sh](scripts/build-dmg.sh)
+    * 建置與 DMG 打包邏輯已移至 `rebuild.sh`。
+  * **修改文件**：[README.md](README.md)、[README.en.md](README.en.md)、[docs/SystemDesign.md](docs/SystemDesign.md)、[AGENTS.md](AGENTS.md)、[GEMINI.md](GEMINI.md)
+    * 將建置流程描述改為根目錄 `rebuild.sh` 單一入口，並明確標示 `runfly.sh` 不負責 build/test。
+* **影響範圍**：建置與啟動責任邊界更清楚；使用者需用 `./rebuild.sh` 建置，用 `./runfly.sh` 啟動既有 Release App。
+
 ### 1. 對齊啟動腳本與 Release 執行路徑
 * **變更原因**：原本 `runfly.sh` 仍混合「建置」與「啟動」兩種責任，且預設流程未直接對應到文件所描述的 `build/release/flyflyfly.app`。這會讓使用者與自動化流程對啟動入口產生歧義。
 * **具體修改細節**：

@@ -80,7 +80,7 @@ flyflyfly/
 - **Language**: All UI strings in Traditional Chinese (zh-TW). Code comments in Chinese/English.
 - **Architecture**: Decoupled into `Core`, `Services`, and `UI`. `ContentView` uses `@StateObject` for `AppViewModel`.
 - **Concurrency**: `@MainActor` on ViewModels. Thread-safety managed via GCD queues and locks.
-- **Builds**: 所有建置產生的檔案皆必須存放於專案根目錄的 `build` 目錄下（分別為 `build/debug`、`build/release` 與 `build/dmg`）。`runfly.sh` 需被修改為直接執行 `build/release/flyflyfly.app`。同時，所有的建置（Builds）都必須同時編譯 Debug 與 Release 兩個版本，以確保兩種配置下的代碼均能正常編譯無誤。
+- **Builds**: 所有建置產生的檔案皆必須存放於專案根目錄的 `build` 目錄下（分別為 `build/debug`、`build/release` 與 `build/dmg`）。`rebuild.sh` 是唯一建置入口，支援 `debug`、`release`、`dmg` 與預設 `all`；`runfly.sh` 只負責執行 `build/release/flyflyfly.app`，不得加入建置或測試責任。
 - **Git & GitHub 變更管理**: 目前所有的變更暫不推送（Push/Sync）至 GitHub。每次進行代碼、配置或準則變更時，皆必須在專案根目錄的 `git_change_log.md` 中以繁體中文詳細記錄變更內容（包括變更原因、具體修改細節與影響），以備日後提交 Git Commit 使用。
 
 ## NOTES

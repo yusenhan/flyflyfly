@@ -115,7 +115,7 @@ graph TD
 
 1. **複製專案**：
    ```bash
-   git clone https://github.com/flyflyfly/flyflyfly.git
+   git clone https://github.com/yusenhan/flyflyfly.git
    cd flyflyfly
    ```
 2. **自動化編譯與建置**（推薦）：
@@ -134,7 +134,7 @@ graph TD
 
 ### 🛠️ 開發與提交規範
 為了保障專案的穩定性與提交紀錄完整度，請全體開發人員與 AI 智能體嚴格遵守以下規範：
-*   **開發階段 (Development)**：日常可先建置 **Debug** 配置進行測試；在整合或提交前，請再以 `./rebuild.sh` 驗證 **Debug + Release + dmg**。
+*   **開發階段 (Development)**：日常可用 `./rebuild.sh debug` 建置 **Debug** 配置進行測試；在整合或提交前，請再以 `./rebuild.sh` 驗證 **Debug + Release + dmg**。
 *   **發佈與提交 (Release & Submission)**：確認功能無誤後，將更新的變更細節以繁體中文詳細記錄於 `git_change_log.md` 中，並保留在本地等待後續提交流程。
 
 ---
