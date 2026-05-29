@@ -19,7 +19,7 @@
 
 ```swift
 func terminateAllProcesses() {
-    // Ensure all spawned processes (pymobiledevice3, dvt-location-stream) are killed
+    // Ensure all spawned processes are killed
     // and pipes are closed.
 }
 ```
@@ -41,7 +41,7 @@ func terminateAllProcesses() {
 
 ```bash
 # Check if bundled/ exists, if not or if scripts changed, run them
-if [ ! -d "bundled" ] || [ -f "scripts/build-bundled-pymobiledevice3.sh" ]; then
-    bash scripts/build-bundled-pymobiledevice3.sh
+if [ ! -d "bundled" ] || [ -f "scripts/build-bundled-tools.sh" ]; then
+    bash scripts/build-bundled-tools.sh
 fi
 ```

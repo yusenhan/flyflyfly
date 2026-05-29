@@ -164,3 +164,28 @@
   * **修改檔案**：[StatusViewSection.swift](flyflyfly/UI/Sidebar/StatusViewSection.swift)
     * 將原先在定點定位模式下的提示文字「Shift + 點擊設定定位點」更改為「在地圖上任意點擊即可定位」，以符合即點即定位的真實操作方式。
 * **影響範圍**：在「定點定位（單點定位）」模式下，實現了極致絲滑與極簡的互動體驗！使用者只需在 Apple 地圖上任意輕點，新位置便會瞬間反射並生效於真實 iPhone 上；同時，右側邊欄會完美呈現一個大紅色的「停止定位」按鈕，沒有任何多餘、無效或重疊的按鈕，操作效率與介面美學提升數倍！
+
+### 16. 全面移除專案中所有第三方 `pymobiledevice3` 套件與相關工具之痕跡
+* **變更原因**：
+  * 本專案已完全實作自主研發的 Swift 原生通訊核心（包含 `DTXMessage`、`DTXClient` 與 `USBMuxMonitor`），能直接處理 USBMux 通訊與 TLS-DTX 位置模擬協議，因此專案本身不需要、也沒有依賴 `pymobiledevice3` 套件來進行定位模擬。
+  * 為了保持專案乾淨與避免混淆，將專案中所有先前遺留的、或是用作範例的 `pymobiledevice3` 相關的代碼註解、UI 錯誤提示、說明文件內容全面移除或改為更通用的描述。
+* **具體修改細節**：
+  * **修改檔案**：[AGENTS.md](AGENTS.md)
+    * 將 iOS 17+ RSD 端點手動發現說明中提及的 `pymobiledevice3 remote start-tunnel` 改為通用的 `external remote tunnel tools`（外部遠端隧道工具）。
+  * **修改檔案**：[FunctionalSpecification.md](docs/FunctionalSpecification.md)
+    * 將專案概述中說明 iOS 17+ 的 RSD host/port 可能來自外部工具的 `pymobiledevice3 remote start-tunnel` 描述，修正為更通用的描述「外部遠端隧道工具」。
+  * **修改檔案**：[SystemDesign.md](docs/SystemDesign.md)
+    * 在外部整合與環境修復章節中，將 RSD 端點手動輸入的取得來源說明，由 `pymobiledevice3 remote start-tunnel` 改為「外部遠端隧道工具」。
+  * **修改檔案**：[2026-04-25-infra-stability.md](docs/superpowers/plans/2026-04-25-infra-stability.md)
+    * 將清除所有殘留子程序之程式碼註解中的 `pymobiledevice3` 移除，並將整合 Xcode Build Phase 的打包腳本檔名範例 `build-bundled-pymobiledevice3.sh` 修改為更通用的 `build-bundled-tools.sh`。
+  * **修改檔案**：[NativeTunnel.cpp](flyflyfly/Core/Algorithms/NativeTunnel.cpp)
+    * 將 send_coordinate 註解中提到的 `相容現有的 pymobiledevice3 隧道，我們發送與原本 python 腳本預期一致的格式` 修改為 `相容現有的外部隧道，我們發送與原本腳本預期一致的格式`。
+  * **修改檔案**：[DeviceManager.swift](flyflyfly/Services/Device/DeviceManager.swift)
+    * 修改 iOS 17+ 設備未偵測到 legacy 設備時的手動 RSD 提示錯誤訊息（`NSLocalizedDescriptionKey`），將引導手動執行 `'pymobiledevice3 remote start-tunnel'` 的說明，改為引導使用者手動輸入 `透過外部遠端隧道工具啟動後獲取的 RSD Address 與 Port`。
+  * **修改檔案**：[project.pbxproj](flyflyfly.xcodeproj/project.pbxproj)
+    * 徹底移除了 `PBXNativeTarget` 區塊中的 `Build Bundled Tools` 與 `Copy Bundled Tools` 兩個編譯建置階段（Build Phases）的參照。
+    * 刪除了 `PBXShellScriptBuildPhase` 區塊中對應的這兩個已無作用且每次編譯皆會拋出警告的 Shell Script 建置定義。
+* **影響範圍**：
+  * 徹底清除了 `pymobiledevice3` 在專案內的所有足跡，消除了文件與程式碼中對該外部特定第三方工具的隱式相依與混淆。
+  * 移除了 Xcode 專案中殘留的兩個無用 Build Phase 腳本，解決了每次建置都會發出的無輸出警告，並稍微提升了專案的建置速度與整潔度。
+  * 保持了對 iOS 17+ RSD 手動輸入引導的正確性，改用更加通用且標準的「外部遠端隧道工具」描述，對現有功能無任何負面影響，程式碼更顯專業且簡潔。

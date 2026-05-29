@@ -55,7 +55,7 @@ bool NativeTunnel::send_coordinate(double lat, double lon) {
 
     // 這裡實作 DVT Location Simulation 協議的簡化版本
     // 實際上 iOS 期望的是一個特定的 PLIST 或 Protobuf 封包
-    // 為了相容現有的 pymobiledevice3 隧道，我們發送與原本 python 腳本預期一致的格式
+    // 為了相容現有的外部隧道，我們發送與原本腳本預期一致的格式
     // 或者直接模擬 DVT 協議。
     
     // 考慮到目前的架構，我們讓 C++ 負責最高頻率的數據寫入

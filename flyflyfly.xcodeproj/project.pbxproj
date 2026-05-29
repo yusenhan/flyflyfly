@@ -412,10 +412,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = CA9AF8712F5539E400AC05E8 /* Build configuration list for PBXNativeTarget "flyflyfly" */;
 			buildPhases = (
-				F0B100022F70000100BUILD /* Build Bundled Tools */,
 				CA9AF8492F5539E300AC05E8 /* Sources */,
 				CA9AF84A2F5539E300AC05E8 /* Frameworks */,
-				F0B100012F70000100BUNDLE /* Copy Bundled Tools */,
 				CA9AF84B2F5539E300AC05E8 /* Resources */,
 			);
 			buildRules = (
@@ -543,42 +541,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		F0B100012F70000100BUNDLE /* Copy Bundled Tools */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Copy Bundled Tools";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "echo \"No tools to copy\"\n";
-		};
-		F0B100022F70000100BUILD /* Build Bundled Tools */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Build Bundled Tools";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "echo \"No tools to build\"\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */

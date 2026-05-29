@@ -71,7 +71,7 @@ flyflyfly/
    - Dispatches coordinate mock requests asynchronously using Swift `Task` on background threads to ensure zero UI stutter.
 5. **Dependency Boundary:**
    - Runtime location injection uses the in-process Swift `DTXClient` and `DVTLocationStream` adapter instead of spawning `dvt-location-stream`.
-   - iOS 17+ RSD endpoint discovery is still manual; the app can consume an RSD host/port obtained via external tooling such as `pymobiledevice3 remote start-tunnel`.
+   - iOS 17+ RSD endpoint discovery is still manual; the app can consume an RSD host/port obtained via external remote tunnel tools.
    - Route interpolation and PurePoint spatial filtering still compile Objective-C++/C++ sources through `FastMotionEngineWrapper`.
    - "Clear simulation" is sent through the native DTX RPC path once the client is connected.
 

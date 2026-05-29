@@ -9,7 +9,7 @@
 ## 🗺️ 專案概述 (Project Overview)
 
 `flyflyfly` 是一款為 iOS 設備開發的 macOS 全原生地理位置模擬與 LBS 軌跡調試工具。
-透過自主研發的 Swift Native USBMux 與 TLS-DTX 通訊通道，本應用能在 App 內部直接發送與清除定位模擬命令。現階段不再使用 `dvt-location-stream` 作為座標注入行程；iOS 17+ 的 RSD host/port 仍需由使用者手動提供，可能來自外部工具如 `pymobiledevice3 remote start-tunnel`。
+透過自主研發的 Swift Native USBMux 與 TLS-DTX 通訊通道，本應用能在 App 內部直接發送與清除定位模擬命令。現階段不再使用 `dvt-location-stream` 作為座標注入行程；iOS 17+ 的 RSD host/port 仍需由使用者手動提供，可能來自外部遠端隧道工具。
 
 ---
 

@@ -462,7 +462,7 @@ final class DeviceManager: ObservableObject, DeviceControlling {
 
             guard let manual = self.manualEndpointIfValid() else {
                 throw NSError(domain: "DeviceManager", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "未偵測到已連線的 iOS 16 及以下設備。對於 iOS 17+ 設備，請點擊設定，並手動輸入在 Mac 終端機啟動 'pymobiledevice3 remote start-tunnel' 後獲取的 RSD Address 與 Port。"
+                    NSLocalizedDescriptionKey: "未偵測到已連線的 iOS 16 及以下設備。對於 iOS 17+ 設備，請點擊設定，並手動輸入透過外部遠端隧道工具啟動後獲取的 RSD Address 與 Port。"
                 ])
             }
             

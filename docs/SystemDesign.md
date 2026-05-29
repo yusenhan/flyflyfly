@@ -46,7 +46,7 @@ flyflyfly 目前採用 **Swift 原生 DTX/USBMux 通訊核心**，定位注入�
 
 ## 4. 外部整合與環境修復
 *   **定位注入零外部常駐行程**：座標發送與清除由 Swift `DTXClient` 直接完成，不再啟動 `dvt-location-stream`。
-*   **RSD 端點手動輸入**：iOS 17+ 連線仍需要使用者提供 RSD host/port；目前可由外部工具（例如 `pymobiledevice3 remote start-tunnel`）取得。
+*   **RSD 端點手動輸入**：iOS 17+ 連線仍需要使用者提供 RSD host/port；目前可由外部遠端隧道工具取得。
 *   **一鍵自癒修復**：App 透過 Swift 重新啟動內部 `USBMuxMonitor`，並輸出手動排障指引；不嘗試以 root 權限重啟系統 `usbmuxd`。
 
 ---
