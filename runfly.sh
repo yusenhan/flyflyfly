@@ -11,8 +11,7 @@ TEST_DERIVED_DATA="${SCRIPT_DIR}/build/test-derived"
 usage() {
   cat <<EOF
 Usage:
-  ./runfly.sh [run|debug]        Build Debug and launch the app (default)
-  ./runfly.sh release            Build Release and launch the app
+  ./runfly.sh [run|release]      Launch build/release/flyflyfly.app (default)
   ./runfly.sh build              Build Debug only
   ./runfly.sh build-release      Build Release only
   ./runfly.sh test               Build and run unit tests
@@ -34,13 +33,12 @@ build_app() {
 }
 
 launch_app() {
-  local mode="$1"
-  local app_path="${SCRIPT_DIR}/build/${mode}/${APP_NAME}.app"
+  local app_path="${SCRIPT_DIR}/build/release/${APP_NAME}.app"
   local app_executable="${app_path}/Contents/MacOS/${APP_NAME}"
 
   if [[ ! -d "${app_path}" ]]; then
     echo "[ERROR] 找不到 App Bundle：${app_path}"
-    echo "[INFO] 請先執行 ./runfly.sh build 或 ./runfly.sh release"
+    echo "[INFO] 請先執行 ./rebuild.sh"
     exit 1
   fi
 
@@ -49,7 +47,7 @@ launch_app() {
     exit 1
   fi
 
-  echo "[INFO] 正在開啟 ${mode} 版本：${app_path}"
+  echo "[INFO] 正在開啟 Release 版本：${app_path}"
   if ! open -n "${app_path}" 2>/dev/null; then
     echo "[WARN] open 啟動失敗，改用二進位直接執行。"
     exec "${app_executable}"
@@ -103,17 +101,10 @@ main() {
   local command="${1:-run}"
 
   case "${command}" in
-    run|debug)
-      ensure_xcodebuild
-      build_app debug
-      launch_app debug
+    run|release)
+      launch_app
       ;;
-    release)
-      ensure_xcodebuild
-      build_app release
-      launch_app release
-      ;;
-    build|build-debug)
+    build|build-debug|debug)
       ensure_xcodebuild
       build_app debug
       ;;

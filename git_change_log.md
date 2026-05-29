@@ -4,6 +4,45 @@
 
 ---
 
+## 變更紀錄 [2026-05-29]
+
+### 1. 對齊啟動腳本與 Release 執行路徑
+* **變更原因**：原本 `runfly.sh` 仍混合「建置」與「啟動」兩種責任，且預設流程未直接對應到文件所描述的 `build/release/flyflyfly.app`。這會讓使用者與自動化流程對啟動入口產生歧義。
+* **具體修改細節**：
+  * **修改檔案**：[runfly.sh](runfly.sh)
+  * **修改內容**：
+    * 將預設 `run|release` 流程改為直接開啟 `build/release/flyflyfly.app`。
+    * 保留 `build`、`build-release`、`test` 與 `xcode-test` 等指令作為手動建置與測試入口。
+    * 調整說明文字，使找不到 App 時直接提示先執行 `./rebuild.sh`。
+* **影響範圍**：`runfly.sh` 現在明確只負責啟動已建置的 Release 版本，與文件中的使用方式一致。
+
+### 2. 對齊 Debug / Release / DMG 建置流程
+* **變更原因**：原本統合建置流程只保證 Debug 與 DMG，未穩定覆蓋 Release 路徑；`build-dmg.sh` 也會重複建置 Release，導致流程描述與實作不一致。
+* **具體修改細節**：
+  * **修改檔案**：[scripts/build.sh](scripts/build.sh)
+    * 將 `all` 模式調整為依序建置 Debug、Release，最後再呼叫 `build-dmg.sh`。
+    * 補強 help 文字，明確標示 `all` 會同時產出 Debug + Release + DMG。
+  * **修改檔案**：[scripts/build-dmg.sh](scripts/build-dmg.sh)
+    * 改為優先重用已存在的 `build/release/flyflyfly.app`。
+    * 若 Release App 不存在，才自行執行 Release build 並複製到 `build/release/`。
+    * 將 DMG staging 固定改用 `build/release` 的 App 作為來源。
+  * **修改檔案**：[rebuild.sh](rebuild.sh)
+    * 明確改為呼叫 `scripts/build.sh all`，讓一鍵重建直接覆蓋完整流程。
+* **影響範圍**：現在一鍵重建會穩定產出 `build/debug`、`build/release` 與 `build/dmg`，且 Release 版本可直接作為啟動目標，不再有雙重建置與流程歧義。
+
+### 3. 同步 README 與系統設計文件
+* **變更原因**：README 與系統設計文件對於啟動方式、建置順序與提交規範的說法，仍與實際腳本行為存在落差。
+* **具體修改細節**：
+  * **修改檔案**：[README.md](README.md)、[README.en.md](README.en.md)
+    * 新增 `./runfly.sh` 直接啟動 `build/release/flyflyfly.app` 的說明。
+    * 將開發/提交規範修正為：日常可先建置 Debug，但在整合或提交前要用 `./rebuild.sh` 驗證 Debug + Release + dmg。
+    * 移除明確要求 `git push` 的文字，改為僅保留本地變更與紀錄流程。
+  * **修改檔案**：[docs/SystemDesign.md](docs/SystemDesign.md)
+    * 將一鍵建置與雙配置編譯描述改為與 `scripts/build.sh all`、`build-dmg.sh` 的實際行為一致。
+* **影響範圍**：文件現在和腳本的實際行為對齊，能直接作為正確的操作指引與維護依據。
+
+---
+
 ## 變更紀錄 [2026-05-24]
 
 ### 1. 簡化啟動腳本與調整執行路徑

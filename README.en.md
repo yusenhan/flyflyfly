@@ -127,13 +127,15 @@ graph TD
    - `build/debug/flyflyfly.app` - Debug configuration build for active development and inspection.
    - `build/release/flyflyfly.app` - Highly optimized production Release configuration build.
    - `build/dmg/flyflyfly.dmg` - Distribution package disc image with drag-and-drop installation support.
-3. **Xcode Manual Development**:
+3. **Launching an already built app**:
+   Run `./runfly.sh` to open `build/release/flyflyfly.app` directly.
+4. **Xcode Manual Development**:
    Double-click `flyflyfly.xcodeproj` to open the project in Xcode. Select the main Scheme and press **Run (⌘R)** to compile, deploy, and inspect the app natively!
 
 ### 🛠️ Build & Commit Guidelines
 To ensure development efficiency and release stability, please follow these guidelines carefully:
-*   **Development Phase**: Build only the **Debug** configuration for testing. Keep Git commits local (no push).
-*   **Release & Submission**: Once features are fully verified, compile both **Release** and **dmg** configurations, write detailed change summaries in Traditional Chinese to `git_change_log.md`, then execute `git push` to upload to the remote repository.
+*   **Development Phase**: Build **Debug** during day-to-day testing, and run `./rebuild.sh` before integration or submission to verify **Debug + Release + dmg** together.
+*   **Release & Submission**: Once features are fully verified, write detailed change summaries in Traditional Chinese to `git_change_log.md` and keep the changes local for the next submission step.
 
 ---
 

@@ -127,13 +127,15 @@ graph TD
    - `build/debug/flyflyfly.app` - 用於開發與調試的 Debug 配置版本
    - `build/release/flyflyfly.app` - 具備高級優化的完整生產 Release 版本
    - `build/dmg/flyflyfly.dmg` - 包含拖拽安裝功能的磁碟映像發布套件
-3. **Xcode 手動開發**：
+3. **直接啟動已建置版本**：
+   執行 `./runfly.sh` 即可直接開啟 `build/release/flyflyfly.app`。
+4. **Xcode 手動開發**：
    雙擊開啟 `flyflyfly.xcodeproj`，在 Xcode 中選擇主 Scheme，點擊 **Run (⌘R)** 即可直接以原生方式進行 Debug 調試與運行！
 
 ### 🛠️ 開發與提交規範
 為了保障專案的穩定性與提交紀錄完整度，請全體開發人員與 AI 智能體嚴格遵守以下規範：
-*   **開發階段 (Development)**：僅建置 **Debug** 配置進行測試。保持 Git 提交在本地（不推送至 GitHub）。
-*   **發佈與提交 (Release & Push)**：確認功能無誤後，必須完整編譯 **Release** 與 **dmg** 兩種配置，將更新的變更細節以繁體中文詳細記錄於 `git_change_log.md` 中，隨後方可執行 `git push` 上傳至遠端倉庫。
+*   **開發階段 (Development)**：日常可先建置 **Debug** 配置進行測試；在整合或提交前，請再以 `./rebuild.sh` 驗證 **Debug + Release + dmg**。
+*   **發佈與提交 (Release & Submission)**：確認功能無誤後，將更新的變更細節以繁體中文詳細記錄於 `git_change_log.md` 中，並保留在本地等待後續提交流程。
 
 ---
 

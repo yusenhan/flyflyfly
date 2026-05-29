@@ -13,39 +13,43 @@ DMG_PATH="${ROOT_DIR}/build/dmg/${APP_NAME}.dmg"
 TEMP_DMG_PATH="${BUILD_ROOT}/${APP_NAME}-temp.dmg"
 VOLUME_NAME="${APP_NAME}"
 
-echo "[INFO] Building ${APP_NAME} (Release)..."
 rm -rf "${BUILD_ROOT}"
 mkdir -p "${STAGING_DIR}"
 
-xcodebuild \
-  -project "${PROJECT_PATH}" \
-  -scheme "${APP_NAME}" \
-  -configuration Release \
-  -derivedDataPath "${DERIVED_DATA_DIR}" \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY="" \
-  build
+if [[ ! -d "${ROOT_DIR}/build/release/${APP_NAME}.app" ]]; then
+  echo "[INFO] Building ${APP_NAME} (Release)..."
+  xcodebuild \
+    -project "${PROJECT_PATH}" \
+    -scheme "${APP_NAME}" \
+    -configuration Release \
+    -derivedDataPath "${DERIVED_DATA_DIR}" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    build
 
-if [[ ! -d "${APP_PATH}" ]]; then
-  echo "ERROR: App not found at ${APP_PATH}"
-  exit 1
+  if [[ ! -d "${APP_PATH}" ]]; then
+    echo "ERROR: App not found at ${APP_PATH}"
+    exit 1
+  fi
+
+  echo "[INFO] Copying Release app bundle to build/release..."
+  mkdir -p "${ROOT_DIR}/build/release"
+  rm -rf "${ROOT_DIR}/build/release/${APP_NAME}.app"
+  cp -R "${APP_PATH}" "${ROOT_DIR}/build/release/${APP_NAME}.app"
+else
+  APP_PATH="${ROOT_DIR}/build/release/${APP_NAME}.app"
 fi
 
 echo "[INFO] Sanitizing app bundle for distribution..."
-find "${APP_PATH}" -name '.DS_Store' -delete
-xattr -cr "${APP_PATH}" 2>/dev/null || true
-rm -rf "${APP_PATH}/Contents/Resources/.claude"
-rm -f "${APP_PATH}/Contents/Resources/settings.local.json"
+find "${ROOT_DIR}/build/release/${APP_NAME}.app" -name '.DS_Store' -delete
+xattr -cr "${ROOT_DIR}/build/release/${APP_NAME}.app" 2>/dev/null || true
+rm -rf "${ROOT_DIR}/build/release/${APP_NAME}.app/Contents/Resources/.claude"
+rm -f "${ROOT_DIR}/build/release/${APP_NAME}.app/Contents/Resources/settings.local.json"
 
 echo "[INFO] Preparing DMG staging directory..."
-cp -R "${APP_PATH}" "${STAGING_DIR}/${APP_NAME}.app"
+cp -R "${ROOT_DIR}/build/release/${APP_NAME}.app" "${STAGING_DIR}/${APP_NAME}.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
-
-echo "[INFO] Copying Release app bundle to build/release..."
-mkdir -p "${ROOT_DIR}/build/release"
-rm -rf "${ROOT_DIR}/build/release/${APP_NAME}.app"
-cp -R "${APP_PATH}" "${ROOT_DIR}/build/release/${APP_NAME}.app"
 
 rm -f "${DMG_PATH}" "${TEMP_DMG_PATH}"
 

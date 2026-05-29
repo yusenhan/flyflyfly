@@ -9,6 +9,7 @@ MODE="${1:-all}"
 
 usage() {
   echo "Usage: $0 [debug|release|dmg|all]"
+  echo "  all = build Debug + Release + DMG"
 }
 
 build_configuration() {
@@ -39,6 +40,12 @@ build_configuration() {
   rm -rf "${build_root}"
 }
 
+build_all() {
+  build_configuration Debug debug
+  build_configuration Release release
+  "${SCRIPT_DIR}/build-dmg.sh"
+}
+
 case "${MODE}" in
   debug)
     build_configuration Debug debug
@@ -50,8 +57,7 @@ case "${MODE}" in
     "${SCRIPT_DIR}/build-dmg.sh"
     ;;
   all)
-    build_configuration Debug debug
-    "${SCRIPT_DIR}/build-dmg.sh"
+    build_all
     ;;
   -h|--help|help)
     usage
