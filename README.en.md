@@ -78,7 +78,7 @@ graph TD
             %% Auto Repair
             C -->|Err| Q[🔌 Diagnostic Card]
             Q -->|Repair| R[Swift USBMuxMonitor restart]
-            R -->|1. Reset USBMuxd<br>2. Clear Ports| Y
+            R -->|1. Restart USBMuxMonitor<br>2. Show troubleshooting guidance| Y
             R -->|Resolved| C
         end
     end

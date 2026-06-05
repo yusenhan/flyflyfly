@@ -52,7 +52,7 @@ English Version: [English README](./README.en.md)
 graph TD
     %% 角色定義
     subgraph UI_Layer [SwiftUI 介面層]
-        A[ContentView / Workflow Tabs] -->|1. 選擇連線| B(AppViewModel)
+        A[ContentView / Sidebar] -->|1. 選擇連線| B(AppViewModel)
         A -->|4. 設定座標與真實模擬參數| B
         A -->|6. 開始移動| B
         Z[🚦 紅綠燈倒計時 HUD] <-->|即時狀態同步| B
@@ -78,7 +78,7 @@ graph TD
             %% 一鍵自癒
             C -->|連線異常| Q[🔌 連線故障排障指引]
             Q -->|一鍵修復| R[Swift 重啟 USBMuxMonitor]
-            R -->|1. 重置 USBMuxd 轉發<br>2. 清除進程殘留| Y
+            R -->|1. 重啟 USBMuxMonitor<br>2. 顯示排障指引| Y
             R -->|修復成功| C
         end
     end
