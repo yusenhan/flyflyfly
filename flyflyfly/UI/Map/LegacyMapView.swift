@@ -33,11 +33,14 @@ struct LegacyMapView: NSViewRepresentable {
     var renderedPurePoints: [VisiblePurePoint] = []
 
     func makeNSView(context: Context) -> MKMapView {
-        let mapView = MKMapView()
+        let mapView = MKMapView(frame: .zero)
+        mapView.autoresizingMask = [.width, .height]
+        mapView.wantsLayer = true
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = false
         mapView.isRotateEnabled = false
         mapView.isPitchEnabled = false
+        mapView.setRegion(vm.mapRegion, animated: false)
         
         let tapGesture = NSClickGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleMapTapGesture(_:)))
         tapGesture.numberOfClicksRequired = 1
@@ -188,6 +191,18 @@ struct LegacyMapView: NSViewRepresentable {
             self.parent = parent
         }
 
+        nonisolated func mapViewWillStartLoadingMap(_ mapView: MKMapView) {
+            print("Debug: MKMapView 開始載入地圖圖資...")
+        }
+
+        nonisolated func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
+            print("Debug: MKMapView 成功完成地圖圖資載入！")
+        }
+
+        nonisolated func mapViewDidFailLoadingMap(_ mapView: MKMapView, withError error: Error) {
+            print("Error: MKMapView 載入地圖圖資失敗！原因: \(error.localizedDescription)")
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
@@ -298,7 +313,7 @@ struct LegacyMapView: NSViewRepresentable {
             // 2. Only sync mapRegion back to VM if it was user-driven
             if !isUpdatingFromExternal {
                 let currentTarget = self.parent.vm.mapRegion
-                if abs(currentTarget.center.latitude - newRegion.center.latitude) > 0.000001 {
+                if !self.parent.isSameRegion(currentTarget, newRegion) {
                     self.parent.vm.mapRegion = newRegion
                 }
             }

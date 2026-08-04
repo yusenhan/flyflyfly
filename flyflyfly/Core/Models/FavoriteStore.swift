@@ -30,12 +30,14 @@ struct FavoriteItem: Codable, Identifiable, Equatable {
     let createdAt: Date
     var country: String?
     var city: String?
+    var useCount: Int
+    var lastUsedAt: Date?
     
     var firstCoordinate: CLLocationCoordinate2D {
         coordinates.first?.clCoordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
     }
     
-    init(id: UUID = UUID(), name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType? = nil, createdAt: Date = Date(), country: String? = nil, city: String? = nil) {
+    init(id: UUID = UUID(), name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType? = nil, createdAt: Date = Date(), country: String? = nil, city: String? = nil, useCount: Int = 0, lastUsedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.type = type
@@ -44,6 +46,26 @@ struct FavoriteItem: Codable, Identifiable, Equatable {
         self.createdAt = createdAt
         self.country = country
         self.city = city
+        self.useCount = useCount
+        self.lastUsedAt = lastUsedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, coordinates, transportType, createdAt, country, city, useCount, lastUsedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(FavoriteType.self, forKey: .type)
+        coordinates = try container.decode([FavoriteCoordinate].self, forKey: .coordinates)
+        transportType = try container.decodeIfPresent(TransportType.self, forKey: .transportType)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        country = try container.decodeIfPresent(String.self, forKey: .country)
+        city = try container.decodeIfPresent(String.self, forKey: .city)
+        useCount = try container.decodeIfPresent(Int.self, forKey: .useCount) ?? 0
+        lastUsedAt = try container.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     }
 }
 
@@ -63,7 +85,19 @@ final class FavoriteStore: ObservableObject {
     
     init() {
         load()
+        sortItems()
         updateGroups()
+    }
+    
+    private func sortItems() {
+        items.sort { a, b in
+            if a.useCount != b.useCount {
+                return a.useCount > b.useCount
+            }
+            let dateA = a.lastUsedAt ?? a.createdAt
+            let dateB = b.lastUsedAt ?? b.createdAt
+            return dateA > dateB
+        }
     }
     
     private func updateGroups() {
@@ -84,8 +118,18 @@ final class FavoriteStore: ObservableObject {
     func add(name: String, type: FavoriteType, coordinates: [CLLocationCoordinate2D], transportType: TransportType? = nil) {
         let newItem = FavoriteItem(name: name, type: type, coordinates: coordinates, transportType: transportType)
         items.insert(newItem, at: 0)
+        sortItems()
         save()
         geocode(newItem)
+    }
+
+    func incrementUseCount(for item: FavoriteItem) {
+        if let index = items.firstIndex(where: { $0.id == item.id }) {
+            items[index].useCount += 1
+            items[index].lastUsedAt = Date()
+            sortItems()
+            save()
+        }
     }
 
     func geocode(_ item: FavoriteItem) {
@@ -137,6 +181,7 @@ final class FavoriteStore: ObservableObject {
     func update(_ item: FavoriteItem, withName name: String) {
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index].name = name
+            sortItems()
             save()
         }
     }
@@ -151,14 +196,16 @@ final class FavoriteStore: ObservableObject {
         // Try loading v3
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([FavoriteItem].self, from: data) {
-            items = decoded.sorted(by: { $0.createdAt > $1.createdAt })
+            items = decoded
+            sortItems()
             return
         }
         
         // Migrate from v2 (Keep geocode here to populate initial data for migration)
         if let data = UserDefaults.standard.data(forKey: v2Key),
            let decoded = try? JSONDecoder().decode([FavoriteItem].self, from: data) {
-            items = decoded.sorted(by: { $0.createdAt > $1.createdAt })
+            items = decoded
+            sortItems()
             save()
             for item in items { geocode(item) }
             UserDefaults.standard.removeObject(forKey: v2Key)
@@ -175,7 +222,8 @@ final class FavoriteStore: ObservableObject {
                     coordinates: [CLLocationCoordinate2D(latitude: legacy.latitude, longitude: legacy.longitude)],
                     createdAt: legacy.createdAt
                 )
-            }.sorted(by: { $0.createdAt > $1.createdAt })
+            }
+            sortItems()
             save()
             for item in items { geocode(item) }
             UserDefaults.standard.removeObject(forKey: legacyKey)

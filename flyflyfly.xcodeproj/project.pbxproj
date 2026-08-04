@@ -64,6 +64,7 @@
 		9F8CA785A7374F52A801DFBA /* USBMuxMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84464337A1264BFA9AE79288 /* USBMuxMonitor.swift */; };
 		ADDC20F2133D4751B70C9FA1 /* DTXClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B29A36640540B2B8D62569 /* DTXClient.swift */; };
 		F73991B9CD6B40078974E4E0 /* DTXMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC4077ABF34CE09EE11221 /* DTXMessage.swift */; };
+		961128BADB794FE48E4FC342 /* SwiftUIMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B951A0692A4A3CA5E97BB0 /* SwiftUIMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -152,6 +153,7 @@
 		84464337A1264BFA9AE79288 /* USBMuxMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "USBMuxMonitor.swift"; sourceTree = "<group>"; };
 		87B29A36640540B2B8D62569 /* DTXClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DTXClient.swift"; sourceTree = "<group>"; };
 		29FC4077ABF34CE09EE11221 /* DTXMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DTXMessage.swift"; sourceTree = "<group>"; };
+		21B951A0692A4A3CA5E97BB0 /* SwiftUIMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwiftUIMapView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 
@@ -271,6 +273,7 @@
 		5384A54CF800BD502435B6B1 /* Map */ = {
 			isa = PBXGroup;
 			children = (
+				21B951A0692A4A3CA5E97BB0,
 				9CB8EEE7CE414806AB39568B,
 				975A9E7DD2A1BF3EBE525420,
 			);
@@ -548,6 +551,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				961128BADB794FE48E4FC342,
 				ADDC20F2133D4751B70C9FA1,
 				F73991B9CD6B40078974E4E0,
 				9F8CA785A7374F52A801DFBA,

@@ -208,11 +208,33 @@ final class AppViewModel: ObservableObject {
     }
     var mapRegion: MKCoordinateRegion {
         get { mapStateStore.mapRegion }
-        set { mapStateStore.mapRegion = newValue }
+        set {
+            let normalized = normalizeMapRegion(newValue)
+            if CLLocationCoordinate2DIsValid(normalized.center),
+               normalized.center.latitude.isFinite,
+               normalized.center.longitude.isFinite,
+               normalized.span.latitudeDelta.isFinite,
+               normalized.span.longitudeDelta.isFinite,
+               normalized.span.latitudeDelta > 0,
+               normalized.span.longitudeDelta > 0 {
+                mapStateStore.mapRegion = normalized
+            }
+        }
     }
     var visibleMapRegion: MKCoordinateRegion {
         get { mapStateStore.visibleMapRegion }
-        set { mapStateStore.visibleMapRegion = newValue }
+        set {
+            let normalized = normalizeMapRegion(newValue)
+            if CLLocationCoordinate2DIsValid(normalized.center),
+               normalized.center.latitude.isFinite,
+               normalized.center.longitude.isFinite,
+               normalized.span.latitudeDelta.isFinite,
+               normalized.span.longitudeDelta.isFinite,
+               normalized.span.latitudeDelta > 0,
+               normalized.span.longitudeDelta > 0 {
+                mapStateStore.visibleMapRegion = normalized
+            }
+        }
     }
     var requestCameraPosition: ((MKCoordinateRegion) -> Void)? {
         get { mapStateStore.requestCameraPosition }
@@ -317,6 +339,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func selectFavorite(_ item: FavoriteItem) {
+        favoriteStore.incrementUseCount(for: item)
         resetDraft(clearActive: false)
         
         switch item.type {
@@ -1082,8 +1105,10 @@ final class AppViewModel: ObservableObject {
 
     func normalizeMapRegion(_ region: MKCoordinateRegion) -> MKCoordinateRegion {
         var r = region
-        r.span.latitudeDelta = max(0.0001, min(150, r.span.latitudeDelta))
-        r.span.longitudeDelta = max(0.0001, min(150, r.span.longitudeDelta))
+        let latDelta = r.span.latitudeDelta.isFinite ? r.span.latitudeDelta : 0.05
+        let lonDelta = r.span.longitudeDelta.isFinite ? r.span.longitudeDelta : 0.05
+        r.span.latitudeDelta = max(0.0001, min(150, latDelta))
+        r.span.longitudeDelta = max(0.0001, min(150, lonDelta))
         return r
     }
 
@@ -1103,13 +1128,15 @@ final class AppViewModel: ObservableObject {
         }
         
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
-        let span = MKCoordinateSpan(latitudeDelta: (maxLat - minLat) * 1.4, longitudeDelta: (maxLon - minLon) * 1.4)
+        let latDelta = max((maxLat - minLat) * 1.4, AppConstants.Map.minimumSpanDelta)
+        let lonDelta = max((maxLon - minLon) * 1.4, AppConstants.Map.minimumSpanDelta)
+        let span = MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lonDelta)
         return MKCoordinateRegion(center: center, span: span)
     }
     
     private func centerMap(on coordinate: CLLocationCoordinate2D) {
-        let latSpan = min(mapRegion.span.latitudeDelta, AppConstants.Map.defaultSpanDelta)
-        let lonSpan = min(mapRegion.span.longitudeDelta, AppConstants.Map.defaultSpanDelta)
+        let latSpan = max(min(mapRegion.span.latitudeDelta, AppConstants.Map.defaultSpanDelta), AppConstants.Map.minimumSpanDelta)
+        let lonSpan = max(min(mapRegion.span.longitudeDelta, AppConstants.Map.defaultSpanDelta), AppConstants.Map.minimumSpanDelta)
         mapRegion = MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: latSpan, longitudeDelta: lonSpan))
     }
 

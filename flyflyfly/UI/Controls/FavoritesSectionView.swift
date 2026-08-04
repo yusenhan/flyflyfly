@@ -251,6 +251,16 @@ struct FavoritesSectionView: View {
             }
             .buttonStyle(.plain)
 
+            if item.useCount > 0 {
+                Text("\(item.useCount) 次")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(4)
+            }
+
             Menu {
                 Button("重新命名") {
                     newName = item.name

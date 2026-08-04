@@ -245,3 +245,73 @@
   * 徹底清除了 `pymobiledevice3` 在專案內的所有足跡，消除了文件與程式碼中對該外部特定第三方工具的隱式相依與混淆。
   * 移除了 Xcode 專案中殘留的兩個無用 Build Phase 腳本，解決了每次建置都會發出的無輸出警告，並稍微提升了專案的建置速度與整潔度。
   * 保持了對 iOS 17+ RSD 手動輸入引導的正確性，改用更加通用且標準的「外部遠端隧道工具」描述，對現有功能無任何負面影響，程式碼更顯專業且簡潔。
+
+### 17. 修復地圖區域計算 (Span Delta 為 0) 與縮放狀態未同步導致地圖白屏不顯示的 Bug
+* **變更原因**：
+  - 1. 當點選或設定定位點、路徑點時，在 `mapRegion(fitting:)` 或 `centerMap(on:)` 內，如果點位只有一個（如定點定位），或當前地圖 span Delta 為 0，會計算出一個 `span` 的 `latitudeDelta` / `longitudeDelta` 為 0 的無效區域（Invalid Region）。一旦傳入 `MKMapView` 將會導致地圖引擎載入失敗、無法繪製地圖圖磚，造成地圖視圖完全變白或空白不顯示。
+  - 2. 在 `LegacyMapView` 的 `mapViewDidChangeVisibleRegion` 中，原先同步 `mapRegion` 回 VM 的邏輯只在中心點 `center.latitude` 改變大於 `0.000001` 時觸發，忽略了純地圖縮放（Zoom in/out）的 span 同步。這使得使用者縮放地圖後，VM 中的 `mapRegion` 依然保留舊的 zoom span。當後續 UI 狀態或 annotations 改變觸發 `updateNSView` 時，由於發現與地圖當前 `region` 的 span 不一致，會強制調用 `setRegion` 將地圖拉回（reset）到之前的舊 zoom level，這會造成地圖畫面劇烈閃爍，甚至在頻繁更新時造成 layout loop 與地圖卡死不顯示。
+  - 3. `UserDefaults` 在讀取先前儲存的地圖 span 或者是進行 `normalizeMapRegion` 運算時，若數值為 `NaN`，在 Swift 平台的 min/max 比較中可能會傳遞並維持 `NaN`，繞過原本僅檢查中心點有效性的 border guards，進而指派無效 region 給 MapKit 造成崩潰。
+* **具體修改細節**：
+  - **修改檔案**：[AppViewModel.swift](flyflyfly/AppViewModel.swift)
+    - 重構 `mapRegion` 與 `visibleMapRegion` 的屬性 setter：呼叫 `normalizeMapRegion` 進行標準化限制，並透過 `CLLocationCoordinate2DIsValid`、中心點 `isFinite` 以外，額外加上 `span.latitudeDelta.isFinite`、`span.longitudeDelta.isFinite` 以及大於 0 的安全驗證，拒絕任何 `NaN` 或是無效經緯度/縮放範圍寫入 Store，從源頭杜絕地圖崩潰。
+    - 修改 `normalizeMapRegion(_:)` 方法：針對傳入的 span 增加 `isFinite` 檢查，如果為 `NaN` 或無限值則預先將其重置為 `0.05` 預設值，保證傳回的 region span 絕對是 finite 數值。
+    - 修改 `mapRegion(fitting:)` 與 `centerMap(on:)` 方法：將計算出或擷取的 `span` 的 `latitudeDelta` 與 `longitudeDelta` 限制最小不得低於 `AppConstants.Map.minimumSpanDelta`（即 0.0005），避免因為點數太少或重合而回傳 0 的 delta 造成 MapKit 崩潰。
+  - **修改檔案**：[LegacyMapView.swift](flyflyfly/UI/Map/LegacyMapView.swift)
+    - 修改 `mapViewDidChangeVisibleRegion` 內的 VM 同步條件：將原先只比對 `center.latitude` 差值的條件，改為使用 `!self.parent.isSameRegion(currentTarget, newRegion)` 進行全區域（包含中心點與 zoom span）的比對。如此一來，使用者的地圖縮放動作也能被完美即時同步回 VM。
+    - 在 `makeNSView` 中顯式為 `MKMapView` 開啟 `wantsLayer = true`，解決 AppKit/SwiftUI 混合層級架構下 Layer-backed rendering 可能失效導致地圖圖磚（Tiles）無法繪製呈灰色的問題。
+    - 在 `makeNSView` 中增加初始 `setRegion(vm.mapRegion, animated: false)` 無動畫設置，確保地圖創建瞬間即拉取正確區域圖資。
+    - 在 `Coordinator` 註冊實作 `mapViewWillStartLoadingMap`、`mapViewDidFinishLoadingMap` 與 `mapViewDidFailLoadingMap(_:withError:)` Delegate 回調方法，以便在執行 `./runfly.sh` 時能在控制台實時監控與診斷圖資下載狀態與失敗原因。
+  - **修改檔案**：[ContentView.swift](flyflyfly/ContentView.swift)
+    - 修改 `init()` 方法中自 `UserDefaults` 載入先前儲存地圖區域的邏輯：對 `spanLat` 與 `spanLon` 加上 `isFinite` 的防禦，若為 `NaN` 或無效值則直接回退使用 `0.05` 預設值，保證初始啟動載入的 region 一定有效。
+    - 在 `init()` 的 `centerCandidate` 判定中加入限制，若經緯度為 `(0,0)` 或是小於 `0.001` 的極小值（可能是舊版殘留的預設或錯誤值），則主動回退至預設的台北市座標，避免地圖因為對準無任何陸地圖標的幾內亞灣海中央而顯示為空白。
+    - 在 `init()` 最末尾加入 `print` 地圖中心座標與 span 的 debug log 輸出，以便於終端機啟動時監控載入資訊。
+* **影響範圍**：
+  - 徹底解決了地圖變白、空白或顯示不出東西的底層 Bug。
+  - 大幅提升了地圖縮放與操作的流暢度，避免了地圖區域在進行 annotation 更新時會突然被 reset 或彈回舊 zoom level 的干擾，人機互動與顯示穩定性大幅提升！
+
+### 18. 修復地圖 Frame 尺寸坍塌為 0 的致命 Root Cause 並新增 SwiftUI 原生地圖渲染引擎
+* **變更原因**：
+  - 1. 排查發現，`LegacyMapView` 的 `makeNSView` 建立 `MKMapView` 時，未設定 `autoresizingMask = [.width, .height]`。在 AppKit 與 SwiftUI 的 `HSplitView` 混合視圖層級下，被包載的 `MKMapView` 其尺寸會死鎖在 `CGRect.zero` (0,0 像素)，無論外層容器多大，畫面均無法展開並下載圖資，這是地圖持續呈空白的最根本原因。
+  - 2. 應使用者要求切換地圖顯示方式，特別實作全新的純 SwiftUI 原生地圖繪製引擎 `SwiftUIMapView`，並在地圖右上角 UI 控制區提供「AppKit 地圖」與「SwiftUI 原生地圖」兩種顯示引擎之無縫切換。
+* **具體修改細節**：
+  - **修改檔案**：[LegacyMapView.swift](flyflyfly/UI/Map/LegacyMapView.swift)
+    - 在 `makeNSView` 開頭建立 `MKMapView(frame: .zero)` 時顯式加入 `mapView.autoresizingMask = [.width, .height]`，解決了視圖在父容器內 Frame 永遠保持為 0 像素導致圖資無法繪製的底層 Bug。
+  - **新增檔案**：[SwiftUIMapView.swift](flyflyfly/UI/Map/SwiftUIMapView.swift)
+    - 使用全原生 SwiftUI `Map(coordinateRegion:annotationItems:)` 重新打造地圖元件，具備動態地圖標記、純點渲染與地圖點擊座標映射功能，完全避開 AppKit 橋接之 autolayout 限制。
+  - **修改檔案**：[ContentView.swift](flyflyfly/ContentView.swift)
+    - 新增 `useSwiftUIMap` 狀態變數，並在地圖右上方控制區加入地圖渲染引擎切換分頁（「AppKit 地圖」與「SwiftUI 原生地圖」），支援即時切換。
+  - **修改檔案**：[update_pbxproj.py](update_pbxproj.py) 與 [project.pbxproj](flyflyfly.xcodeproj/project.pbxproj)
+    - 將新增的 `SwiftUIMapView.swift` 檔案自動掛載註冊至 Xcode 專案建置目標。
+* **影響範圍**：
+  - 徹底排除了 `MKMapView` 在 `HSplitView` 容器內 Frame 保持為 0 像素導致圖資無法顯示的根本致命 Bug，經典地圖現在能以滿版尺寸正常繪製圖資。
+  - 為使用者提供了全新雙架構地圖渲染選項，能夠在右上角一鍵切換「AppKit 地圖」與「SwiftUI 原生地圖」，獲得更豐富穩定的地圖顯示體驗。
+
+### 19. 將「來回巡邏（來回巡禮）」設為系統預設開啟（Default True）
+* **變更原因**：應使用者需求，在 App 初始啟動或重置狀態下，將「來回巡邏（Endless / Ping-Pong Loop）」功能預設設為開啟（`true`），使路線模擬在抵達終點時能預設自動原路返回。
+* **具體修改細節**：
+  - **修改檔案**：[SimulationStore.swift](flyflyfly/Core/Models/SimulationStore.swift)
+    - 將 `@Published var isEndlessLoop: Bool` 與 `@Published var activeIsEndlessLoop: Bool` 的初始值由 `false` 修改為 `true`。
+* **影響範圍**：
+  - 應用程式啟動時，「來回巡邏」開關將預設呈開啟狀態，使用者無需手動勾選即可享有一鍵來回循環巡邏體驗。
+
+### 20. 「我的最愛」支援最常使用項目自動前置排序與使用次數統計
+* **變更原因**：應使用者需求，優化「我的最愛」列表排序邏輯，將使用者「最常使用（點擊/套用次數最高）」的我的最愛項目自動排在清單的最前面。
+* **具體修改細節**：
+  - **修改檔案**：[FavoriteStore.swift](flyflyfly/Core/Models/FavoriteStore.swift)
+    - 在 `FavoriteItem` 結構體中新增 `useCount: Int` 與 `lastUsedAt: Date?` 屬性，並實作自定義 `Codable` 解碼（`init(from decoder:)`）確保向下相容舊版存儲數據。
+    - 實作 `sortItems()` 排序方法：優先以 `useCount` 降序排列（最常使用的排前面）；當次數相同時，以最後使用時間或建立時間降序排列（最新使用的排前面）。
+    - 新增 `incrementUseCount(for item: FavoriteItem)` 方法，更新使用次數與時間並觸發重新排序與持久化儲存。
+  - **修改檔案**：[AppViewModel.swift](flyflyfly/AppViewModel.swift)
+    - 在 `selectFavorite(_ item: FavoriteItem)` 開頭呼叫 `favoriteStore.incrementUseCount(for: item)`，於使用者選用最愛時實時累計使用次數並更新排序。
+  - **修改檔案**：[FavoritesSectionView.swift](flyflyfly/UI/Controls/FavoritesSectionView.swift)
+    - 在我的最愛列（`favoriteRow`）右側加入精緻的 `useCount` 使用次數 Badge 標籤（如 `3 次`）。
+* **影響範圍**：
+  - 我的最愛列表（包含主清單與按國家/城市分組之清單）均改為按使用頻率排序，最熱門項目自動前置，大幅節省使用者尋找常用點位與路線的時間。
+
+### 21. 將交接文件（HANDOVER.md）加入 .gitignore
+* **變更原因**：應使用者指示，避免交接文件（`HANDOVER.md`）被 Git 追蹤或上傳至 GitHub 遠端儲存庫。
+* **具體修改細節**：
+  - **修改檔案**：[.gitignore](.gitignore)
+    - 在尾端新增 `HANDOVER.md` 忽略設定。
+* **影響範圍**：
+  - 交接文件僅存在於本機開發環境，確保不會被 Git Commit 或 Push 到 GitHub。

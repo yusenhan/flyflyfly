@@ -24,6 +24,7 @@ struct ContentView: View {
     @State var pendingImportedOverlayTitles: [String: String] = [:]
     @State var isShowingImportedOverlayNamingSheet: Bool = false
     @State var activeTab: WorkflowTab = .connect
+    @State var useSwiftUIMap: Bool = false
     let routeColors: [Color] = [.yellow, .orange, .mint, .pink]
     private let purePointViewportPadding = AppConstants.PurePoint.viewportPadding
 
@@ -32,13 +33,16 @@ struct ContentView: View {
         let defaults = UserDefaults.standard
         let lat = defaults.object(forKey: PersistedMapKeys.centerLat) as? Double ?? AppConstants.Map.defaultLatitude
         let lon = defaults.object(forKey: PersistedMapKeys.centerLon) as? Double ?? AppConstants.Map.defaultLongitude
-        let spanLat = defaults.object(forKey: PersistedMapKeys.spanLat) as? Double ?? 0.05
-        let spanLon = defaults.object(forKey: PersistedMapKeys.spanLon) as? Double ?? 0.05
+        let spanLatRaw = defaults.object(forKey: PersistedMapKeys.spanLat) as? Double ?? 0.05
+        let spanLonRaw = defaults.object(forKey: PersistedMapKeys.spanLon) as? Double ?? 0.05
+        let spanLat = spanLatRaw.isFinite ? spanLatRaw : 0.05
+        let spanLon = spanLonRaw.isFinite ? spanLonRaw : 0.05
         let centerCandidate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
         let center: CLLocationCoordinate2D
         if CLLocationCoordinate2DIsValid(centerCandidate),
            centerCandidate.latitude.isFinite,
-           centerCandidate.longitude.isFinite {
+           centerCandidate.longitude.isFinite,
+           (abs(centerCandidate.latitude) > 0.001 || abs(centerCandidate.longitude) > 0.001) {
             center = centerCandidate
         } else {
             center = CLLocationCoordinate2D(
@@ -46,6 +50,7 @@ struct ContentView: View {
                 longitude: AppConstants.Map.defaultLongitude
             )
         }
+        print("Debug: ContentView.init - 載入地圖中心座標為: \(center.latitude), \(center.longitude), span: \(spanLat), \(spanLon)")
         let minSpan = AppConstants.Map.minimumSpanDelta
         let maxSpan = AppConstants.Map.maximumSpanDelta
         let region = MKCoordinateRegion(
@@ -128,20 +133,36 @@ struct ContentView: View {
                         ZStack(alignment: .top) {
                             ZStack(alignment: .bottomTrailing) {
                                 ZStack(alignment: .topTrailing) {
-                                    LegacyMapView(vm: vm, simulationStore: simulationStore, renderedPurePoints: renderState.points)
-                                        .ignoresSafeArea()
-                                    
-                                    // Map Style Picker
-                                    Picker("", selection: Binding(
-                                        get: { vm.mapType },
-                                        set: { vm.mapType = $0 }
-                                    )) {
-                                        Text("標準").tag(MKMapType.standard)
-                                        Text("衛星").tag(MKMapType.satellite)
-                                        Text("混合").tag(MKMapType.hybrid)
+                                    if useSwiftUIMap {
+                                        SwiftUIMapView(vm: vm, simulationStore: simulationStore, renderedPurePoints: renderState.points)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                            .ignoresSafeArea()
+                                    } else {
+                                        LegacyMapView(vm: vm, simulationStore: simulationStore, renderedPurePoints: renderState.points)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                            .ignoresSafeArea()
                                     }
-                                    .pickerStyle(.segmented)
-                                    .frame(width: 140)
+                                    
+                                    // Map Engine & Style Controls
+                                    HStack(spacing: 8) {
+                                        Picker("", selection: $useSwiftUIMap) {
+                                            Text("AppKit 地圖").tag(false)
+                                            Text("SwiftUI 原生地圖").tag(true)
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .frame(width: 170)
+                                        
+                                        Picker("", selection: Binding(
+                                            get: { vm.mapType },
+                                            set: { vm.mapType = $0 }
+                                        )) {
+                                            Text("標準").tag(MKMapType.standard)
+                                            Text("衛星").tag(MKMapType.satellite)
+                                            Text("混合").tag(MKMapType.hybrid)
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .frame(width: 140)
+                                    }
                                     .padding(6)
                                     .background(.ultraThinMaterial)
                                     .cornerRadius(8)

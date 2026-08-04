@@ -44,3 +44,6 @@ dist/
 
 # Antigravity CLI Config
 .antigravitycli/
+
+# Handover and local memory docs
+HANDOVER.md

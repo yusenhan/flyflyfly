@@ -13,13 +13,13 @@ final class SimulationStore: ObservableObject {
     @Published var traveledDistance: Double = 0.0
     @Published var totalRouteDistance: Double = 0.0
     @Published var activeIsClosedLoop: Bool = false
-    @Published var activeIsEndlessLoop: Bool = false
+    @Published var activeIsEndlessLoop: Bool = true
     @Published var isActiveSimulationRunning: Bool = false
     @Published var shouldResumeActiveAfterReconnect: Bool = false
     
     // MARK: - Settings
     @Published var speed: Double = AppConstants.Simulation.defaultSpeed
-    @Published var isEndlessLoop: Bool = false
+    @Published var isEndlessLoop: Bool = true
     @Published var isClosedLoop: Bool = false
     
     // MARK: - Drift & Traffic Light Settings & States
